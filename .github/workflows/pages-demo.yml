@@ -2,8 +2,7 @@ name: WASM demo · GitHub Pages
 
 on:
   push:
-    branches:
-      - "**"
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -41,6 +40,7 @@ jobs:
           path: _site
 
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
