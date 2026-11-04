@@ -39,7 +39,7 @@ export class WasmGamePlayer {
         else if(data.type==="ERROR"){clearTimeout(timer);reject(Error(data.message));}
       };
       this.worker.onerror=()=>{clearTimeout(timer);reject(Error("WASM worker failed"));};
-      this.worker.postMessage({type:"INIT",bytes,config:{...config,runtime:manifest.runtime},limits:{
+      this.worker.postMessage({type:"INIT",bytes:bytes.buffer,config:{...config,runtime:manifest.runtime},limits:{
         maxMemoryPages:Math.min(caps.maxMemoryPages,this.options.maxMemoryPages),
         maxOutputBytes:Math.min(caps.maxOutputBytes,this.options.maxOutputBytes)
       }},[bytes]);
