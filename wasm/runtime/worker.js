@@ -83,7 +83,7 @@ onmessage = async ({data}) => {
       const frame=new Uint8Array(d.bytes); frame.set(new Uint8Array(memory.buffer,ptr,d.bytes));
       postMessage({type:"FRAME",width:d.width,height:d.height,frame:frame.buffer},[frame.buffer]);
     } else if(data.type==="SHUTDOWN" && !stopped) {
-      stopped=true; try { ex.game_shutdown(); } finally { close(); }
+      stopped=true; try { ex.game_shutdown(); } finally { postMessage({type:"SHUTDOWN_ACK"}); close(); }
     } else if(data.type!=="INIT" && data.type!=="SHUTDOWN") {
       throw Error("unknown worker message type");
     }
