@@ -82,7 +82,11 @@ def _compare_versions(left, right):
     for x, y in zip(a[3], b[3]):
         if x != y:
             return -1 if x < y else 1
-    return (len(a[3]) > len(b[3])) - (len(a[3]) < len(b[3]))
+    prerelease_length = (len(a[3]) > len(b[3])) - (len(a[3]) < len(b[3]))
+    if prerelease_length:
+        return prerelease_length
+    # SemVer build metadata has equal precedence; use the full version string as a stable tie-breaker.
+    return (left > right) - (left < right)
 
 
 def _safe_relative_path(value):
