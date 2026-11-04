@@ -14,6 +14,9 @@ function range(ptr,len) {
 }
 function u32(value) { const n=value; if(!Number.isInteger(n)||n<0||n>0xffffffff) throw Error("invalid guest dimension/pointer"); return n; }
 function status(code,name) { checkMemory(); if(code!==0) throw Error(name+" failed ("+code+")"); }
+function exactKeys(value,allowed,name) {
+  if(!value || typeof value!=="object" || Array.isArray(value) || Object.keys(value).some(key=>!allowed.includes(key))) throw Error("malformed "+name+" message");
+}
 function dimensions() {
   const width=u32(ex.game_get_width()),height=u32(ex.game_get_height()),bytes=width*height*4;
   if(!width||!height||width>1024||height>1024||!Number.isSafeInteger(bytes)||bytes>limits.maxOutputBytes) throw Error("invalid framebuffer dimensions/size");
@@ -36,7 +39,9 @@ onmessage = async ({data}) => {
   try {
     if(!data || typeof data!=="object" || typeof data.type!=="string") throw Error("malformed worker message");
     if(data.type==="INIT") {
-      if(instance || !data.limits || !data.config || !(data.bytes instanceof ArrayBuffer)) throw Error("malformed INIT message");
+      exactKeys(data,["type","bytes","config","limits"],"INIT");
+      if(stopped || instance || !data.limits || !data.config || typeof data.config!=="object" || Array.isArray(data.config) || !(data.bytes instanceof ArrayBuffer)) throw Error("malformed INIT message");
+      exactKeys(data.limits,["maxMemoryPages","maxOutputBytes"],"INIT limits");
       limits=data.limits; config=data.config;
       if(!Number.isInteger(limits.maxMemoryPages)||limits.maxMemoryPages<1||limits.maxMemoryPages>256||
          !Number.isInteger(limits.maxOutputBytes)||limits.maxOutputBytes<4||limits.maxOutputBytes>4*1024*1024||
@@ -63,7 +68,8 @@ onmessage = async ({data}) => {
       range(rp,rl);
       postMessage({type:"READY",width:d.width,height:d.height});
     } else if(data.type==="INPUT" && !stopped) {
-      if(!data.event || typeof data.event!=="object" || Array.isArray(data.event)) throw Error("malformed input event");
+      exactKeys(data,["type","event"],"INPUT");
+      if(!instance || !ex || !data.event || typeof data.event!=="object" || Array.isArray(data.event)) throw Error("malformed input event");
       validateEvent(data.event);
       const bytes=new TextEncoder().encode(JSON.stringify(data.event));
       const p=u32(ex.game_get_input_buffer_ptr()),cap=u32(ex.game_get_input_buffer_capacity());
@@ -73,7 +79,8 @@ onmessage = async ({data}) => {
       status(ex.game_input(p,bytes.length),"game_input");
       postMessage({type:"INPUT_ACK"});
     } else if(data.type==="TICK" && !stopped) {
-      if(data.dtMicros!==16667) throw Error("invalid fixed timestep");
+      exactKeys(data,["type","dtMicros"],"TICK");
+      if(!instance || !ex || data.dtMicros!==16667) throw Error("invalid fixed timestep");
       status(ex.game_update(data.dtMicros),"game_update");
       const d=dimensions(),ptr=u32(ex.game_get_render_buffer_ptr()),len=u32(ex.game_get_render_buffer_len());
       if(len<d.bytes) throw Error("render buffer too small");
@@ -83,6 +90,8 @@ onmessage = async ({data}) => {
       const frame=new Uint8Array(d.bytes); frame.set(new Uint8Array(memory.buffer,ptr,d.bytes));
       postMessage({type:"FRAME",width:d.width,height:d.height,frame:frame.buffer},[frame.buffer]);
     } else if(data.type==="SHUTDOWN" && !stopped) {
+      exactKeys(data,["type"],"SHUTDOWN");
+      if(!instance || !ex) throw Error("shutdown before initialization");
       stopped=true; try { ex.game_shutdown(); } finally { postMessage({type:"SHUTDOWN_ACK"}); close(); }
     } else if(data.type!=="INIT" && data.type!=="SHUTDOWN") {
       throw Error("unknown worker message type");
