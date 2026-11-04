@@ -109,3 +109,20 @@ Timestamps use the simulation clock, so paused wall time is excluded.
 
 Run the repository's normal static deployment after copying these files into
 the frontend's `dist/wasm/` output.
+
+
+## Browser demo
+
+A small Snake game demonstrates the browser runtime end to end. Its guest is
+implemented in `demo/game.c`; the manifest lives in
+`demo/games/snake/manifest.json`. The guest receives keyboard events through
+ABI v1 and draws an RGBA framebuffer; the page hosts the Canvas, Worker
+lifecycle controls, and event stream.
+
+Open `demo/index.html` through a static server (not `file://`) after building
+the guest module to `demo/games/snake/game.wasm`. The
+`.github/workflows/pages-demo.yml` workflow builds the WASM module with
+Clang/LLD, assembles the static site, and deploys it to GitHub Pages on pushes
+to any branch. The repository's Pages site is shared: a deployment from one
+branch replaces the currently published site rather than creating a permanent
+per-branch URL.
