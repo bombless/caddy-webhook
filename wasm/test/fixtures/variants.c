@@ -69,7 +69,13 @@ __attribute__((export_name("game_get_render_buffer_ptr")))
 u32 game_get_render_buffer_ptr(void) { return (u32)(unsigned long)framebuffer; }
 
 __attribute__((export_name("game_get_render_buffer_len")))
-u32 game_get_render_buffer_len(void) { return 4; }
+u32 game_get_render_buffer_len(void) {
+#if defined(OVERSIZED_RENDER_LEN)
+  return 131072;
+#else
+  return 4;
+#endif
+}
 
 __attribute__((export_name("game_get_config_buffer_ptr")))
 u32 game_get_config_buffer_ptr(void) {
