@@ -36,7 +36,7 @@ export class WasmGamePlayer {
       const timer=setTimeout(()=>reject(Error("WASM initialization timeout")),this.options.watchdogMs);
       this.worker.onmessage=({data})=>{
         if(data.type==="READY"){clearTimeout(timer);resolve();}
-        else if(data.type==="ERROR"){clearTimeout(timer);reject(Error(data.message));}
+        else if(data.type==="ERROR"){clearTimeout(timer);this.worker.terminate();this.worker=null;reject(Error(data.message));}
       };
       this.worker.onerror=()=>{clearTimeout(timer);reject(Error("WASM worker failed"));};
       this.worker.postMessage({type:"INIT",bytes:bytes.buffer,config:{...config,runtime:manifest.runtime},limits:{
@@ -56,7 +56,7 @@ export class WasmGamePlayer {
     if(!Array.isArray(m.runtime.capabilities)||m.runtime.capabilities.length>16) throw Error("invalid capabilities");
   }
   _message(data) {
-    if(data.type==="ERROR"){this.pause();this.options.onError?.(new Error(data.message));return;}
+    if(data.type==="ERROR"){this.pause();this.worker?.terminate();this.worker=null;this.options.onError?.(new Error(data.message));return;}
     if(data.type==="FRAME" && data.width===this.width && data.height===this.height && data.frame instanceof ArrayBuffer && data.frame.byteLength===this.width*this.height*4) {
       this.ctx.putImageData(new ImageData(new Uint8ClampedArray(data.frame),this.width,this.height),0,0);
     }
@@ -91,7 +91,7 @@ export class WasmGamePlayer {
   pause() { if(!this.running)return;this.running=false;cancelAnimationFrame(this._raf);this._clearInput(); }
   _tick(now) {
     if(!this.running)return;
-    const elapsed=Math.min((now-this.last)/1000,0.1);this.last=now;this.acc+=elapsed;
+    const elapsed=Math.min((now-this.last)/1000,0.1);this.last=now;this.acc=Math.min(this.acc+elapsed,0.1);
     if(this.acc>=this.step&&!this._busy){this._timedPost({type:"TICK",dtMicros:16667});this.acc-=this.step;}
     this._raf=requestAnimationFrame(t=>this._tick(t));
   }
