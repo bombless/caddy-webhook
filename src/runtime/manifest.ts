@@ -28,16 +28,25 @@ export function validateManifest(value: unknown): PluginManifest {
       m.entry.split('/').some((part: string) => !part || part === '.' || part === '..')) {
     throw new Error('entry must be a safe package-relative path')
   }
-  if (!m.runtime || m.runtime.apiVersion !== '1' || !Array.isArray(m.runtime.capabilities) ||
-      !m.runtime.capabilities.every((x: unknown) => typeof x === 'string' && x.length <= 64)) {
+  const runtime = m.runtime
+  if (!runtime || runtime.apiVersion !== '1' || !runtime.display || typeof runtime.display !== 'object' ||
+      !Array.isArray(runtime.capabilities) ||
+      !runtime.capabilities.every((x: unknown) => typeof x === 'string' && x.length > 0 && x.length <= 64) ||
+      new Set(runtime.capabilities).size !== runtime.capabilities.length) {
     throw new Error('Invalid runtime declaration')
+  }
+  if (runtime.display.orientation !== undefined && !['landscape', 'portrait', 'any'].includes(runtime.display.orientation)) throw new Error('Invalid display orientation')
+  if (runtime.display.resize !== undefined && !['contain', 'cover'].includes(runtime.display.resize)) throw new Error('Invalid display resize mode')
+  if (runtime.display.aspectRatio !== undefined &&
+      (typeof runtime.display.aspectRatio !== 'string' || !/^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(runtime.display.aspectRatio))) {
+    throw new Error('Invalid display aspect ratio')
   }
   return m as PluginManifest
 }
 
 export async function loadManifest(packageUrl: string): Promise<{ manifest: PluginManifest; packageUrl: URL }> {
   const base = new URL(packageUrl, window.location.href)
-  if (!['http:', 'https:'].includes(base.protocol)) throw new Error('Unsupported package URL scheme')
+  if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password) throw new Error('Unsupported package URL')
   if (!base.pathname.endsWith('/')) base.pathname += '/'
   const response = await fetch(new URL('manifest.json', base), { credentials: 'omit', redirect: 'error', cache: 'no-store' })
   if (!response.ok) throw new Error(`Manifest request failed (${response.status})`)
