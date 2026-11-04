@@ -470,9 +470,17 @@ class Handler(BaseHTTPRequestHandler):
         print(self.client_address[0], fmt % args)
 
 
+def initialize_storage():
+    for directory in ('tmp', 'releases', 'games'):
+        os.makedirs(os.path.join(ROOT, directory), mode=0o2750, exist_ok=True)
+    registry_path = os.path.join(ROOT, 'games', 'registry.json')
+    with REGISTRY_LOCK:
+        if not os.path.exists(registry_path):
+            _write_registry(registry_path, {'registryVersion': 1, 'games': []})
+
+
 if __name__ == '__main__':
     if not TOKEN:
         raise SystemExit('DEPLOY_TOKEN required')
-    for directory in ('tmp', 'releases', 'games'):
-        os.makedirs(os.path.join(ROOT, directory), mode=0o2750, exist_ok=True)
+    initialize_storage()
     Server(('127.0.0.1', 8765), Handler).serve_forever()
