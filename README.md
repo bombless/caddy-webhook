@@ -78,7 +78,9 @@ npm test
 npm run build
 ```
 
-See [the production webhook migration handoff](docs/deployment-webhook-handoff.md) for the exact endpoint, storage, Caddy, permissions, backup, rollout, and smoke-test contract.\n\n## Server-agent handoff boundary
+See [the production webhook migration handoff](docs/deployment-webhook-handoff.md) for the exact endpoint, storage, Caddy, permissions, backup, rollout, and smoke-test contract.
+
+## Server-agent handoff boundary
 
 This repository change does **not** install or activate code on the production server. A separate agent must reconcile the deployed service with this source of truth.
 
