@@ -47,7 +47,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - [x] Add invalid fixtures for missing exports, wrong ABI version, unexpected imports, over-limit memory, invalid pointers, oversized framebuffer, invalid dimensions, and trap-on-call.
 - [x] Add tests for manifest validation and unsafe entry paths.
 - [x] Add tests for module/package size limits, memory limits, and output bounds (streaming reader and manifest/runtime bounds; worker memory/output fixtures already cover the guest boundary).
-- [ ] Add tests for worker message validation and malformed payloads.
+- [x] Add tests for worker message validation and malformed payloads.
 - [ ] Add tests for watchdog timeout and worker termination.
 - [ ] Add tests for pause/resume/dispose and held-key cleanup.
 - [ ] Add browser tests that instantiate a real module and verify Canvas output.
@@ -129,6 +129,12 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - Added `wasm/test/player.test.js` for manifest validation, safe/unsafe package entry paths, and streamed package/module size-limit behavior. Exported the small `safePath` and `readLimited` helpers for direct tests; the player’s existing `_validateManifest()` is exercised without constructing DOM state.
 - CI run [41843753939](https://github.com/bombless/caddy-webhook/actions/runs/41843753939) passed on commit `b3518eb76102dbb720c782aee6e0b5a953ca4ab6` (syntax checks and all worker + player tests).
 - GitHub Actions passes on the current branch (7 test groups, including the real fixture corpus). Remaining P0 gaps include exact WASM export-signature conformance, watchdog/lifecycle tests, browser Canvas tests, and the deterministic headless harness. Manifest/path and streaming-size helper tests are now covered; full JSON Schema conformance and end-to-end fetch integration are not yet proven.
+
+## Implementation progress (2026-11-04, continued)
+
+- Hardened the Worker message protocol: INIT, INPUT, TICK, and SHUTDOWN now reject unexpected top-level fields; INIT limits reject unexpected keys; config must be a non-array object; input/tick/shutdown require the appropriate initialized lifecycle state.
+- Added regression coverage for unknown message types, extra INIT/INPUT/TICK fields, and shutdown-before-initialization.
+- CI run [41844085548](https://github.com/bombless/caddy-webhook/actions/runs/41844085548) passed on commit `f11de5b3437b2d164b51eb2f59f9a6eaa79b5b92` (JavaScript syntax checks and worker ABI tests).
 
 ## Handoff / next session
 
