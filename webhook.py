@@ -88,7 +88,7 @@ def _compare_versions(left, right):
 def _safe_relative_path(value):
     if not isinstance(value, str) or not value or len(value) > 240:
         return False
-    if value.startswith('/') or '\\' in value or ':' in value or '%' in value:
+    if value.startswith('/') or '\\' in value or ':' in value or '%' in value or '?' in value or '#' in value:
         return False
     parts = value.split('/')
     return all(part not in ('', '.', '..') for part in parts)
