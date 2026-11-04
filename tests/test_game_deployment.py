@@ -120,6 +120,14 @@ class GameDeploymentTests(unittest.TestCase):
             self.assertTrue(os.path.isfile(os.path.join(
                 webhook.ROOT, 'games', 'moonlight-courier', version, 'index.html')))
 
+
+    def test_build_metadata_ties_use_lexical_version_order(self):
+        self.assertEqual(self.publish_vue('build-tie', '1.0.0+build.a')[0], 200)
+        self.assertEqual(self.publish_vue('build-tie', '1.0.0+build.b')[0], 200)
+        _status, _ctype, registry = self.request('GET', '/_games/registry.json')
+        game = next(g for g in registry['games'] if g['id'] == 'build-tie')
+        self.assertEqual(game['latestVersion'], '1.0.0+build.b')
+
     def test_duplicate_id_version_returns_conflict_without_overwrite(self):
         self.assertEqual(self.publish_vue()[0], 200)
         status, _ctype, body = self.publish_vue()
