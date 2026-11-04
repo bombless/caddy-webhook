@@ -9,6 +9,9 @@ export function createGameBridge() {
   let capabilities = new Set<string>()
   const listeners = new Map<string, Set<Listener>>()
   const pending = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: number }>()
+  const notify = (type: string, payload: Record<string, unknown>) => {
+    for (const fn of listeners.get(type) ?? []) fn(payload)
+  }
   const emit = (type: string, payload: Record<string, unknown> = {}, requestId?: string) => {
     if (!instanceId) return
     window.parent.postMessage(envelope(instanceId, type, payload, requestId), hostOrigin || '*')
@@ -42,9 +45,32 @@ export function createGameBridge() {
       if (p) { clearTimeout(p.timer); pending.delete(m.requestId); m.payload.ok ? p.resolve(m.payload.value) : p.reject(new Error(String(m.payload.error ?? 'Host request failed'))) }
       return
     }
-    for (const fn of listeners.get(m.type) ?? []) fn(m.payload)
+    if (m.type === 'HOST_PAUSE') { notify('LIFECYCLE_PAUSE', {}); return }
+    if (m.type === 'HOST_RESUME') { notify('LIFECYCLE_RESUME', {}); return }
+    if (m.type === 'HOST_DISPOSE') { notify('LIFECYCLE_DISPOSE', {}); dispose(); return }
+    if (m.type === 'VIEWPORT_RESIZE') notify('VIEWPORT_RESIZE', m.payload)
+    if (m.type === 'INPUT_EVENT') notify('INPUT_EVENT', m.payload)
   }
+  const localInput = (event: KeyboardEvent | PointerEvent) => {
+    if (!instanceId) return
+    if (event instanceof KeyboardEvent) {
+      if (!capabilities.has('input.keyboard')) return
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape', 'KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(event.code)) return
+      notify('INPUT_EVENT', { type: event.type === 'keydown' ? 'KEY_DOWN' : 'KEY_UP', code: event.code, repeat: event.repeat, timestamp: Math.round(performance.now() * 1000) })
+    } else {
+      if (!capabilities.has('input.pointer')) return
+      const rect = document.documentElement.getBoundingClientRect()
+      notify('INPUT_EVENT', { type: event.type.toUpperCase(), x: event.clientX - rect.left, y: event.clientY - rect.top, buttons: event.buttons, timestamp: Math.round(performance.now() * 1000) })
+    }
+  }
+  const keyDown = (e: KeyboardEvent) => localInput(e)
+  const pointer = (e: PointerEvent) => localInput(e)
   window.addEventListener('message', receive)
+  window.addEventListener('keydown', keyDown)
+  window.addEventListener('keyup', keyDown)
+  window.addEventListener('pointerdown', pointer)
+  window.addEventListener('pointerup', pointer)
+  window.addEventListener('pointermove', pointer)
   const runtime: GameRuntime = {
     assets: { url: (path) => {
       if (typeof path !== 'string' || !path || path.startsWith('/') || path.includes('\\') || path.split('/').some(x => x === '..' || x === '.')) throw new Error('Asset path must be package-relative')
@@ -69,12 +95,15 @@ export function createGameBridge() {
       subscribe: (fn) => { const off = on('VIEWPORT_RESIZE', fn); fn({ width: window.innerWidth, height: window.innerHeight }); return off },
     },
   }
-  return {
-    runtime,
-    dispose() {
-      window.removeEventListener('message', receive)
-      for (const p of pending.values()) { clearTimeout(p.timer); p.reject(new Error('Bridge disposed')) }
-      pending.clear(); listeners.clear()
-    },
+  function dispose() {
+    window.removeEventListener('message', receive)
+    window.removeEventListener('keydown', keyDown)
+    window.removeEventListener('keyup', keyDown)
+    window.removeEventListener('pointerdown', pointer)
+    window.removeEventListener('pointerup', pointer)
+    window.removeEventListener('pointermove', pointer)
+    for (const p of pending.values()) { clearTimeout(p.timer); p.reject(new Error('Bridge disposed')) }
+    pending.clear(); listeners.clear()
   }
+  return { runtime, dispose }
 }
