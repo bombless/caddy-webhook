@@ -1,6 +1,27 @@
 const DEFAULTS = { maxModuleBytes: 16*1024*1024, maxMemoryPages: 256, maxOutputBytes: 4*1024*1024, watchdogMs: 1000, maxQueue: 128 };
 const KEY_CODES = new Set(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","Space","Enter","Escape"]);
-const safePath = p => typeof p==="string" && p.length<=240 && !p.startsWith("/") && !p.includes("\\") && !p.split("/").some(x=>!x||x==="."||x==="..") && !/^[a-z]+:/i.test(p);
+const safePath = p => {
+  if (typeof p !== "string" || !p.length || p.length > 240 || p.startsWith("/") || p.includes("\\\\") || /[%\\u0000-\\u001f\\u007f]/.test(p) || /^[a-z][a-z0-9+.-]*:/i.test(p)) return false;
+  let decoded; try { decoded = decodeURIComponent(p); } catch { return false; }
+  return decoded === p && !p.split("/").some(x => !x || x === "." || x === "..");
+};
+async function readLimited(response, limit, label) {
+  const declared = Number(response.headers.get("content-length") || 0);
+  if (Number.isFinite(declared) && declared > limit) throw Error(label + " size limit exceeded");
+  if (!response.body?.getReader) throw Error("streaming response body required");
+  const reader = response.body.getReader(), chunks=[]; let total=0;
+  try {
+    for (;;) {
+      const {done,value}=await reader.read(); if(done) break;
+      total += value.byteLength;
+      if(total > limit) { await reader.cancel(); throw Error(label + " size limit exceeded"); }
+      chunks.push(value);
+    }
+  } catch(e) { try { await reader.cancel(); } catch {} throw e; }
+  const bytes=new Uint8Array(total); let offset=0;
+  for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
+  return bytes;
+}
 
 export class WasmGamePlayer {
   constructor(canvas, options={}) {
@@ -15,30 +36,28 @@ export class WasmGamePlayer {
     const base=new URL(".",packageUrl), manifestUrl=new URL("manifest.json",base);
     const mr=await fetch(manifestUrl,{credentials:"omit",redirect:"error"});
     if(!mr.ok) throw Error("manifest fetch failed: "+mr.status);
-    const manifest=await mr.json(); this._validateManifest(manifest);
+    const manifestBytes=await readLimited(mr,64*1024,"manifest");
+    let manifest;
+    try { manifest=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(manifestBytes)); }
+    catch { throw Error("manifest is not valid UTF-8 JSON"); }
+    this._validateManifest(manifest);
     const wasmUrl=new URL(manifest.entry,base);
     if(wasmUrl.origin!==base.origin || !wasmUrl.pathname.startsWith(base.pathname)) throw Error("entry escapes package root");
     const response=await fetch(wasmUrl,{credentials:"omit",redirect:"error"});
     if(!response.ok) throw Error("WASM fetch failed: "+response.status);
     const caps=manifest.runtime.wasm;
-    const declared=Number(response.headers.get("content-length")||0);
-    if(declared>this.options.maxModuleBytes) throw Error("WASM module size limit exceeded");
-    const reader=response.body?.getReader();
-    if(!reader) throw Error("streaming response body required");
-    const chunks=[]; let total=0;
-    for(;;){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>this.options.maxModuleBytes){await reader.cancel();throw Error("WASM module size limit exceeded");}chunks.push(value);}
-    if(!total) throw Error("empty WASM module");
-    const bytes=new Uint8Array(total);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
+    const bytes=await readLimited(response,this.options.maxModuleBytes,"WASM module");
+    if(!bytes.byteLength) throw Error("empty WASM module");
     this.manifest=manifest; this.width=manifest.runtime.display.width; this.height=manifest.runtime.display.height;
     this.canvas.width=this.width; this.canvas.height=this.height;
     this.worker=new Worker(new URL("./worker.js",import.meta.url),{type:"module",name:"bombless-wasm-game"});
     await new Promise((resolve,reject)=>{
-      const timer=setTimeout(()=>reject(Error("WASM initialization timeout")),this.options.watchdogMs);
+      const timer=setTimeout(()=>{this.worker?.terminate();this.worker=null;reject(Error("WASM initialization timeout"));},this.options.watchdogMs);
       this.worker.onmessage=({data})=>{
         if(data.type==="READY"){clearTimeout(timer);resolve();}
         else if(data.type==="ERROR"){clearTimeout(timer);this.worker.terminate();this.worker=null;reject(Error(data.message));}
       };
-      this.worker.onerror=()=>{clearTimeout(timer);reject(Error("WASM worker failed"));};
+      this.worker.onerror=()=>{clearTimeout(timer);this.worker?.terminate();this.worker=null;reject(Error("WASM worker failed"));};
       this.worker.postMessage({type:"INIT",bytes:bytes.buffer,config:{...config,runtime:manifest.runtime},limits:{
         maxMemoryPages:Math.min(caps.maxMemoryPages,this.options.maxMemoryPages),
         maxOutputBytes:Math.min(caps.maxOutputBytes,this.options.maxOutputBytes)
@@ -48,12 +67,21 @@ export class WasmGamePlayer {
     this._attachInput(); this.resume(); return manifest;
   }
   _validateManifest(m) {
-    if(!m||m.manifestVersion!==1||m.pluginType!=="wasm"||!m.runtime||m.runtime.apiVersion!=="1") throw Error("invalid plugin manifest");
+    if(!m||typeof m!=="object"||Array.isArray(m)||m.manifestVersion!==1||m.pluginType!=="wasm"||!m.runtime||m.runtime.apiVersion!=="1") throw Error("invalid plugin manifest");
+    if(typeof m.name!=="string"||!m.name.trim()||m.name.length>120||typeof m.version!=="string"||!/^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(m.version)) throw Error("invalid plugin metadata");
+    const allowedTop=new Set(["manifestVersion","id","name","version","pluginType","entry","runtime"]);
+    if(Object.keys(m).some(k=>!allowedTop.has(k))) throw Error("unknown manifest field");
     if(!/^[a-z0-9][a-z0-9-]{0,63}$/.test(m.id||"")||!safePath(m.entry)||!m.entry.endsWith(".wasm")) throw Error("invalid plugin id or entry");
     const d=m.runtime.display,w=m.runtime.wasm;
     if(!d||!Number.isInteger(d.width)||!Number.isInteger(d.height)||d.width<1||d.height<1||d.width>1024||d.height>1024) throw Error("invalid display dimensions");
     if(!w||w.abi!=="bombless-game-abi"||w.abiVersion!==1||w.renderMode!=="rgba"||!Number.isInteger(w.maxMemoryPages)||w.maxMemoryPages<1||w.maxMemoryPages>256||!Number.isInteger(w.maxOutputBytes)||w.maxOutputBytes<4||w.maxOutputBytes>4*1024*1024) throw Error("invalid WASM limits/ABI");
-    if(!Array.isArray(m.runtime.capabilities)||m.runtime.capabilities.length>16) throw Error("invalid capabilities");
+    const allowedCaps=new Set(["input.keyboard","input.pointer","audio","storage","score"]);
+    if(!Array.isArray(m.runtime.capabilities)||m.runtime.capabilities.length>16||new Set(m.runtime.capabilities).size!==m.runtime.capabilities.length||m.runtime.capabilities.some(x=>!allowedCaps.has(x))) throw Error("invalid capabilities");
+    if(Object.keys(m.runtime).some(k=>!["apiVersion","display","capabilities","wasm"].includes(k))) throw Error("unknown runtime field");
+    if(d.pixelScale!==undefined&&!["integer","fit"].includes(d.pixelScale)) throw Error("invalid pixelScale");
+    if(d.orientation!==undefined&&!["landscape","portrait","any"].includes(d.orientation)) throw Error("invalid orientation");
+    if(Object.keys(d).some(k=>!["width","height","pixelScale","orientation"].includes(k))) throw Error("unknown display field");
+    if(Object.keys(w).some(k=>!["abi","abiVersion","maxMemoryPages","maxOutputBytes","renderMode"].includes(k))) throw Error("unknown WASM field");
   }
   _message(data) {
     if(data.type==="ERROR"){this.pause();this.worker?.terminate();this.worker=null;this.options.onError?.(new Error(data.message));return;}
