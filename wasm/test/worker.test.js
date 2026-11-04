@@ -5,6 +5,26 @@ import { runInNewContext } from "node:vm";
 
 const workerSource = await readFile(new URL("../runtime/worker.js", import.meta.url), "utf8");
 const validModule = Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0]).buffer;
+const realModuleBase64 = (await readFile(new URL("./fixtures/minimal-valid.wasm.b64", import.meta.url), "utf8")).trim();
+const realModule = Uint8Array.from(Buffer.from(realModuleBase64, "base64")).buffer;
+
+function realHarness() {
+  const messages = [];
+  const scope = {
+    WebAssembly, Uint8Array, ArrayBuffer, TextEncoder, JSON, Number, Math, Set, Error,
+    postMessage: message => messages.push(message),
+    close() {}
+  };
+  runInNewContext(workerSource, scope);
+  return {
+    messages,
+    send: async data => { await scope.onmessage({ data }); },
+    init: async (bytes = realModule) => scope.onmessage({ data: {
+      type: "INIT", bytes, config: { runtime: { display: { width: 1, height: 1 } } },
+      limits: { maxMemoryPages: 2, maxOutputBytes: 4096 }
+    } })
+  };
+}
 
 function harness(overrides = {}) {
   const messages = [];
@@ -98,4 +118,22 @@ test("rejects out-of-bounds guest buffers and malformed input events", async () 
   await h.init();
   await h.send({ type: "INPUT", event: { type: "KEY_DOWN", code: "NotAKey", modifiers: 0, timestamp_micros: 1 } });
   assert.match(h.messages.at(-1).message, /keyboard event/);
+});
+
+
+test("real ABI v1 WASM fixture initializes, accepts input, renders RGBA, and shuts down", async () => {
+  const h = realHarness();
+  await h.init();
+  assert.equal(h.messages[0].type, "READY");
+  assert.equal(h.messages[0].width, 1);
+  assert.equal(h.messages[0].height, 1);
+  await h.send({ type: "INPUT", event: {
+    type: "KEY_DOWN", code: "KeyW", modifiers: 0, timestamp_micros: 1
+  }});
+  assert.equal(h.messages[1].type, "INPUT_ACK");
+  await h.send({ type: "TICK", dtMicros: 16667 });
+  assert.equal(h.messages[2].type, "FRAME");
+  assert.deepEqual([...new Uint8Array(h.messages[2].frame)], [255, 0, 0, 255]);
+  await h.send({ type: "SHUTDOWN" });
+  assert.equal(h.messages[3].type, "SHUTDOWN_ACK");
 });
