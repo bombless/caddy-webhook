@@ -12,7 +12,7 @@ function range(ptr,len) {
   if(!Number.isInteger(ptr)||!Number.isInteger(len)||ptr<0||len<0||ptr+len>memory.buffer.byteLength) throw Error("guest memory range invalid");
   return ptr;
 }
-function u32(fn) { const n=fn(); if(!Number.isInteger(n)||n<0||n>0xffffffff) throw Error("invalid guest dimension/pointer"); return n; }
+function u32(value) { const n=value; if(!Number.isInteger(n)||n<0||n>0xffffffff) throw Error("invalid guest dimension/pointer"); return n; }
 function status(code,name) { checkMemory(); if(code!==0) throw Error(name+" failed ("+code+")"); }
 function dimensions() {
   const width=u32(ex.game_get_width()),height=u32(ex.game_get_height()),bytes=width*height*4;
