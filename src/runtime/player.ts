@@ -20,8 +20,8 @@ export class GamePlayerRuntime {
   state: PlayerState = 'loading'
   private options: PlayerOptions
   private timer?: number
+  private targetOrigin = '*'
   private messageListener: (event: MessageEvent) => void
-  private keyListener: (event: KeyboardEvent) => void
   private disposed = false
 
   constructor(iframe: HTMLIFrameElement, options: PlayerOptions = {}) {
@@ -29,15 +29,7 @@ export class GamePlayerRuntime {
     this.options = options
     this.instanceId = crypto.randomUUID() + crypto.randomUUID()
     this.messageListener = (event) => this.receive(event)
-    this.keyListener = (event) => {
-      if (this.state !== 'running' || !this.iframe.contentWindow) return
-      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape', 'KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(event.code)) return
-      event.preventDefault()
-      this.send('INPUT_EVENT', { type: event.type === 'keydown' ? 'KEY_DOWN' : 'KEY_UP', code: event.code, repeat: event.repeat, timestamp: Math.round(performance.now() * 1000) })
-    }
     window.addEventListener('message', this.messageListener)
-    window.addEventListener('keydown', this.keyListener)
-    window.addEventListener('keyup', this.keyListener)
   }
 
   private setState(state: PlayerState) {
@@ -56,6 +48,7 @@ export class GamePlayerRuntime {
       if (gameOrigin && (gameOrigin !== entry.origin || gameOrigin === window.location.origin)) {
         throw new Error('gameOrigin must match the plugin origin and differ from the host origin')
       }
+      this.targetOrigin = gameOrigin ?? '*'
       this.iframe.setAttribute('sandbox', gameOrigin ? 'allow-scripts allow-same-origin' : 'allow-scripts')
       this.iframe.referrerPolicy = 'no-referrer'
       this.iframe.title = manifest.name
@@ -64,7 +57,7 @@ export class GamePlayerRuntime {
         this.iframe.contentWindow?.postMessage(envelope(this.instanceId, 'HOST_INIT', {
           apiVersion: '1', packageUrl: packageUrl.href, capabilities,
           viewport: { width: this.iframe.clientWidth, height: this.iframe.clientHeight },
-        }), gameOrigin ?? '*')
+        }), this.targetOrigin)
       }, { once: true })
       this.iframe.src = entry.href
       this.timer = window.setTimeout(() => this.fail(new Error('Game loading timed out')), this.options.timeoutMs ?? 15_000)
@@ -101,16 +94,15 @@ export class GamePlayerRuntime {
   }
 
   private reply(id: string, ok: boolean, value?: unknown, error?: string) {
-    this.iframe.contentWindow?.postMessage(envelope(this.instanceId, 'HOST_RESPONSE', { ok, value, error }, id), this.options.gameOrigin ?? '*')
+    this.iframe.contentWindow?.postMessage(envelope(this.instanceId, 'HOST_RESPONSE', { ok, value, error }, id), this.targetOrigin)
   }
-
   resize() {
     if (this.state !== 'disposed' && this.state !== 'error') this.send('VIEWPORT_RESIZE', { width: this.iframe.clientWidth, height: this.iframe.clientHeight })
   }
   pause() { this.send('HOST_PAUSE', {}); this.setState('paused') }
   resume() { this.send('HOST_RESUME', {}); this.setState('running') }
   private send(type: string, payload: Record<string, unknown>) {
-    this.iframe.contentWindow?.postMessage(envelope(this.instanceId, type, payload), this.options.gameOrigin ?? '*')
+    this.iframe.contentWindow?.postMessage(envelope(this.instanceId, type, payload), this.targetOrigin)
   }
   private fail(error: Error) {
     if (this.disposed) return
@@ -120,12 +112,10 @@ export class GamePlayerRuntime {
   }
   dispose() {
     if (this.disposed) return
+    this.send('HOST_DISPOSE', {})
     this.disposed = true
     if (this.timer) clearTimeout(this.timer)
     window.removeEventListener('message', this.messageListener)
-    window.removeEventListener('keydown', this.keyListener)
-    window.removeEventListener('keyup', this.keyListener)
-    this.send('HOST_DISPOSE', {})
     this.iframe.src = 'about:blank'
     this.setState('disposed')
   }
