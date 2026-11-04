@@ -285,3 +285,48 @@ test("resume restarts the fixed-step loop after pause and resets accumulated tim
     else globalThis.requestAnimationFrame = original;
   }
 });
+
+
+test("malformed and unknown worker messages terminate the worker and report an error", () => {
+  for (const message of [
+    null,
+    { type: "INPUT_ACK" },
+    { type: "FRAME", width: 1, height: 1, frame: new ArrayBuffer(3) },
+    { type: "UNEXPECTED" }
+  ]) {
+    const instance = Object.create(WasmGamePlayer.prototype);
+    let terminated = 0;
+    let reported;
+    const worker = { onmessage: () => {}, onerror: () => {}, onmessageerror: () => {}, terminate: () => { terminated++; } };
+    Object.assign(instance, {
+      worker, width: 1, height: 1, held: new Set(), pendingInputs: 0, _busy: true,
+      _watchdogTimer: null, running: false, _inputAttached: false,
+      _reportError: error => { reported = error; }
+    });
+    instance._message(message);
+    assert.equal(terminated, 1);
+    assert.equal(instance.worker, null);
+    assert.equal(instance.pendingInputs, 0);
+    assert.equal(instance._busy, false);
+    assert.ok(reported instanceof Error);
+  }
+});
+
+test("worker protocol failure clears a pending watchdog and detaches worker handlers", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  let terminated = 0;
+  let reported;
+  const worker = { onmessage: 1, onerror: 1, onmessageerror: 1, terminate: () => { terminated++; } };
+  Object.assign(instance, {
+    worker, width: 1, height: 1, held: new Set(), pendingInputs: 1, _busy: true,
+    _watchdogTimer: setTimeout(() => assert.fail("watchdog should be cleared"), 1000),
+    running: false, _inputAttached: false, _reportError: error => { reported = error; }
+  });
+  instance._message({ type: "INPUT_ACK", extra: true });
+  assert.equal(terminated, 1);
+  assert.equal(worker.onmessage, null);
+  assert.equal(worker.onerror, null);
+  assert.equal(worker.onmessageerror, null);
+  assert.equal(instance._watchdogTimer, null);
+  assert.match(reported.message, /acknowledgement/);
+});
