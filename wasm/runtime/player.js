@@ -1,4 +1,5 @@
 const DEFAULTS = { maxModuleBytes: 16*1024*1024, maxMemoryPages: 256, maxOutputBytes: 4*1024*1024, watchdogMs: 1000, maxQueue: 128, renderHz: 30 };
+const IMPLEMENTED_CAPABILITIES = new Set(["input.keyboard", "input.pointer"]);
 const KEY_CODES = new Set(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","Space","Enter","Escape"]);
 const safePath = p => {
   if (typeof p !== "string" || !p.length || p.length > 240 || p.startsWith("/") || p.includes("\\") || /[%\u0000-\u001f\u007f]/.test(p) || !/^[A-Za-z0-9._/-]+$/.test(p) || /^[a-z][a-z0-9+.-]*:/i.test(p)) return false;
@@ -27,6 +28,7 @@ export class WasmGamePlayer {
   constructor(canvas, options={}) {
     if(!(canvas instanceof HTMLCanvasElement)) throw new TypeError("canvas required");
     this.canvas=canvas; this.options={...DEFAULTS,...options};
+    if(!Array.isArray(this.options.grantedCapabilities) || this.options.grantedCapabilities.some(cap=>typeof cap!=="string"||!IMPLEMENTED_CAPABILITIES.has(cap)) || new Set(this.options.grantedCapabilities).size!==this.options.grantedCapabilities.length) throw new TypeError("grantedCapabilities must contain unique, implemented capability names");
     const renderHz=Number.isFinite(this.options.renderHz)?this.options.renderHz:DEFAULTS.renderHz;
     this.renderInterval=1/Math.min(60,Math.max(10,renderHz));
     this.maxCatchUpSteps=6;
@@ -60,6 +62,7 @@ export class WasmGamePlayer {
     try { manifest=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(manifestBytes)); }
     catch { throw Error("manifest is not valid UTF-8 JSON"); }
     this._validateManifest(manifest);
+    manifest=this._grantCapabilities(manifest);
     const wasmUrl=new URL(manifest.entry,base);
     if(wasmUrl.origin!==base.origin || !wasmUrl.pathname.startsWith(base.pathname)) throw Error("entry escapes package root");
     const response=await fetch(wasmUrl,{credentials:"omit",redirect:"error",signal:controller.signal});
@@ -121,6 +124,10 @@ export class WasmGamePlayer {
     this._detachInput();
     if(this.worker){this.worker.onmessage=null;this.worker.onerror=null;this.worker.onmessageerror=null;this.worker.terminate();}
     this.worker=null;
+  }
+  _grantCapabilities(manifest) {
+    const granted=new Set(this.options.grantedCapabilities);
+    return {...manifest,runtime:{...manifest.runtime,capabilities:manifest.runtime.capabilities.filter(cap=>granted.has(cap))}};
   }
   _validateManifest(m) {
     if(!m||typeof m!=="object"||Array.isArray(m)||m.manifestVersion!==1||m.pluginType!=="wasm"||!m.runtime||m.runtime.apiVersion!=="1") throw Error("invalid plugin manifest");
