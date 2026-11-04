@@ -175,3 +175,11 @@ CI validation (2026-11-04): initial runs [41841293121](https://github.com/bomble
 5. Build C and Rust Snake packages and prove cross-toolchain compatibility (P1).
 6. Integrate the Player into the actual frontend and deployment flow (P1).
 7. Profile rendering, consider optional extensions, and complete release documentation (P2).
+
+
+## Implementation progress (2026-11-04, ABI signature conformance)
+
+- Added a bounded parser for the standard WASM type/function/export sections in the Worker. Because the WebAssembly JavaScript API does not expose function signatures, the runtime now verifies all 14 required ABI v1 exports' i32 parameter/result arity before instantiation and requires an exported linear memory.
+- The runtime rejects imported functions during the same preflight parse (and continues to reject imports through the WebAssembly module API) before any guest code is called.
+- Added a regression test that mutates the real valid WASM fixture's game_init type index while preserving the binary structure; the Worker must reject it with an ABI signature error.
+- Validation is pending the GitHub Actions run triggered by these commits. Browser Canvas tests, explicit resume coverage, and deterministic game-state replay remain outstanding.
