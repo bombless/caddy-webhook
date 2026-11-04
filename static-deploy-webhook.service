@@ -1,0 +1,21 @@
+[Unit]
+Description=Static deployment webhook
+After=network.target
+
+[Service]
+Type=simple
+User=deployhook
+Group=deployhook
+SupplementaryGroups=caddy
+EnvironmentFile=/etc/static-deploy/webhook.env
+UMask=0027
+PrivateTmp=true
+ProtectHome=true
+ExecStart=/usr/bin/python3 /usr/local/libexec/static-deploy/webhook.py
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/static-deploy
+
+[Install]
+WantedBy=multi-user.target
