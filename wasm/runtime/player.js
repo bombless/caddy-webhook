@@ -26,7 +26,7 @@ async function readLimited(response, limit, label) {
 export class WasmGamePlayer {
   constructor(canvas, options={}) {
     if(!(canvas instanceof HTMLCanvasElement)) throw new TypeError("canvas required");
-    this.canvas=canvas; this.options={...DEFAULTS,...options}; this.inputWindowStart=0; this.inputCount=0; this.lastPointerMove=0; this.pendingInputs=0; this._watchdogTimer=null; this.startedAt=0; this.held=new Set(); this.running=false; this.disposed=false; this.last=0; this.acc=0; this.step=1/60; this.worker=null; this.loading=false; this._inputAttached=false; this._lastLoad=null; this._busy=false;
+    this.canvas=canvas; this.options={...DEFAULTS,...options}; this.inputWindowStart=0; this.inputCount=0; this.lastPointerMove=0; this.pendingInputs=0; this._watchdogTimer=null; this.startedAt=0; this.held=new Set(); this.running=false; this.disposed=false; this.last=0; this.acc=0; this.step=1/60; this.worker=null; this.loading=false; this._inputAttached=false; this._lastLoad=null; this._busy=false; this._loadController=null;
     this.ctx=canvas.getContext("2d",{alpha:false}); if(!this.ctx) throw Error("2D canvas unavailable");
     this._key=e=>this._keyEvent(e); this._pointer=e=>this._pointerEvent(e);
     this._blur=()=>this.pause(); this._visibility=()=>{if(document.hidden)this.pause();};
@@ -43,29 +43,31 @@ export class WasmGamePlayer {
     if(this.disposed) throw Error("player disposed");
     if(this.loading||this.worker) throw Error("player is already loading or running; dispose it before loading another package");
     this.loading=true; this._lastLoad={packageUrl,config};
+    const controller=new AbortController(); this._loadController=controller;
+    const assertActive=()=>{if(this.disposed||controller.signal.aborted) throw new DOMException("Load aborted","AbortError");};
     try {
     const base=new URL(".",packageUrl), manifestUrl=new URL("manifest.json",base);
-    const mr=await fetch(manifestUrl,{credentials:"omit",redirect:"error"});
+    const mr=await fetch(manifestUrl,{credentials:"omit",redirect:"error",signal:controller.signal});
     if(!mr.ok) throw Error("manifest fetch failed: "+mr.status);
-    const manifestBytes=await readLimited(mr,64*1024,"manifest");
+    const manifestBytes=await readLimited(mr,64*1024,"manifest"); assertActive();
     let manifest;
     try { manifest=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(manifestBytes)); }
     catch { throw Error("manifest is not valid UTF-8 JSON"); }
     this._validateManifest(manifest);
     const wasmUrl=new URL(manifest.entry,base);
     if(wasmUrl.origin!==base.origin || !wasmUrl.pathname.startsWith(base.pathname)) throw Error("entry escapes package root");
-    const response=await fetch(wasmUrl,{credentials:"omit",redirect:"error"});
+    const response=await fetch(wasmUrl,{credentials:"omit",redirect:"error",signal:controller.signal});
     if(!response.ok) throw Error("WASM fetch failed: "+response.status);
     const caps=manifest.runtime.wasm;
-    const bytes=await readLimited(response,this.options.maxModuleBytes,"WASM module");
+    const bytes=await readLimited(response,this.options.maxModuleBytes,"WASM module"); assertActive();
     if(!bytes.byteLength) throw Error("empty WASM module");
     this.manifest=manifest; this.width=manifest.runtime.display.width; this.height=manifest.runtime.display.height;
     this.canvas.width=this.width; this.canvas.height=this.height;
-    this.worker=new Worker(new URL("./worker.js",import.meta.url),{type:"module",name:"bombless-wasm-game"});
+    assertActive(); this.worker=new Worker(new URL("./worker.js",import.meta.url),{type:"module",name:"bombless-wasm-game"});
     await new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>{this.worker?.terminate();this.worker=null;reject(Error("WASM initialization timeout"));},this.options.watchdogMs);
       this.worker.onmessage=({data})=>{
-        if(data.type==="READY"){clearTimeout(timer);resolve();}
+        if(data?.type==="READY"){clearTimeout(timer);resolve();}
         else if(data.type==="ERROR"){clearTimeout(timer);this.worker.terminate();this.worker=null;reject(Error(data.message));}
       };
       this.worker.onerror=()=>{clearTimeout(timer);this.worker?.terminate();this.worker=null;reject(Error("WASM worker failed"));};
@@ -88,10 +90,13 @@ export class WasmGamePlayer {
     this.startedAt=performance.now();
     this._attachInput(); this.errorElement.hidden=true; this.resume(); return manifest;
     } catch(error) {
-      this._cleanupFailedLoad(); this._reportError(error); throw error;
-    } finally { this.loading=false; }
+      this._cleanupFailedLoad();
+      if(!this.disposed && error?.name!=="AbortError") this._reportError(error);
+      throw error;
+    } finally { this.loading=false; if(this._loadController===controller)this._loadController=null; }
   }
   _reportError(error) {
+    if(this.disposed)return;
     this.pause(); this._detachInput();
     const message=error instanceof Error?error.message:String(error);
     this.errorMessage.textContent="Game unavailable: "+message;
@@ -103,7 +108,9 @@ export class WasmGamePlayer {
     clearTimeout(this._watchdogTimer); this._watchdogTimer=null;
     if(this.running){this.running=false;cancelAnimationFrame(this._raf);}
     this.held.clear(); this.pendingInputs=0; this._busy=false;
-    this._detachInput(); this.worker?.terminate(); this.worker=null;
+    this._detachInput();
+    if(this.worker){this.worker.onmessage=null;this.worker.onerror=null;this.worker.onmessageerror=null;this.worker.terminate();}
+    this.worker=null;
   }
   _validateManifest(m) {
     if(!m||typeof m!=="object"||Array.isArray(m)||m.manifestVersion!==1||m.pluginType!=="wasm"||!m.runtime||m.runtime.apiVersion!=="1") throw Error("invalid plugin manifest");
@@ -191,7 +198,9 @@ export class WasmGamePlayer {
     this.worker.postMessage(message);
   }
   async dispose() {
-    if(this.disposed)return;this.pause();this.disposed=true;this._clearInput();
+    if(this.disposed)return;
+    this.disposed=true; this._loadController?.abort();
+    this.pause(); this._clearInput(); clearTimeout(this._watchdogTimer); this._watchdogTimer=null;
     this._detachInput(); this.errorElement.remove();
     if(this.worker){
       const worker=this.worker; this.worker=null; clearTimeout(this._watchdogTimer); this._watchdogTimer=null;
