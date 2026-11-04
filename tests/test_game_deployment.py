@@ -115,7 +115,7 @@ class GameDeploymentTests(unittest.TestCase):
         game = registry['games'][0]
         self.assertEqual(game['latestVersion'], '1.2.0')
         self.assertEqual([v['version'] for v in game['versions']],
-                         ['1.1.0-beta.1', '1.0.0', '1.2.0'])
+                         ['1.0.0', '1.1.0-beta.1', '1.2.0'])
         for version in ('1.0.0', '1.1.0-beta.1', '1.2.0'):
             self.assertTrue(os.path.isfile(os.path.join(
                 webhook.ROOT, 'games', 'moonlight-courier', version, 'index.html')))
