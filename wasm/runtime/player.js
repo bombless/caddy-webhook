@@ -232,7 +232,11 @@ export class WasmGamePlayer {
     if(!this.worker || this.pendingInputs>=this.options.maxQueue+(event.type==="KEY_UP"?32:0))return;
     const now=performance.now(); if(now-this.inputWindowStart>=1000){this.inputWindowStart=now;this.inputCount=0;}
     if(this.inputCount>=128 && event.type!=="KEY_UP")return; this.inputCount++; this.pendingInputs++;
-    this.worker.postMessage({type:"INPUT",event});
+    try { this.worker.postMessage({type:"INPUT",event}); }
+    catch(error) {
+      this.pendingInputs=Math.max(0,this.pendingInputs-1);
+      this._failWorker(Error("WASM worker input delivery failed: "+(error instanceof Error?error.message:String(error))));
+    }
   }
   _clearInput() { for(const code of this.held)this._send({type:"KEY_UP",code,modifiers:0,timestamp_micros:this._timestampMicros()});this.held.clear(); }
   resume() { if(this.disposed||!this.worker||this.running)return;this.running=true;this.last=performance.now();this.lastRender=0;this.acc=0;this._raf=requestAnimationFrame(t=>this._tick(t)); }
@@ -257,7 +261,12 @@ export class WasmGamePlayer {
       this.pendingInputs=0; this._busy=false;
       this._reportError(Error("WASM watchdog timeout"));
     },this.options.watchdogMs);
-    this.worker.postMessage(message);
+    try { this.worker.postMessage(message); }
+    catch(error) {
+      clearTimeout(this._watchdogTimer); this._watchdogTimer=null;
+      this._busy=false;
+      this._failWorker(Error("WASM worker message delivery failed: "+(error instanceof Error?error.message:String(error))));
+    }
   }
   async dispose() {
     if(this.disposed)return;
