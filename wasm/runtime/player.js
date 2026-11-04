@@ -27,9 +27,11 @@ export class WasmGamePlayer {
   constructor(canvas, options={}) {
     if(!(canvas instanceof HTMLCanvasElement)) throw new TypeError("canvas required");
     this.canvas=canvas; this.options={...DEFAULTS,...options}; this.inputWindowStart=0; this.inputCount=0; this.lastPointerMove=0; this.pendingInputs=0; this._watchdogTimer=null; this.startedAt=0; this.held=new Set(); this.running=false; this.disposed=false; this.last=0; this.acc=0; this.step=1/60; this.worker=null; this.loading=false; this._inputAttached=false; this._lastLoad=null; this._busy=false; this._loadController=null;
+    if (canvas.tabIndex < 0) canvas.tabIndex = 0;
     this.ctx=canvas.getContext("2d",{alpha:false}); if(!this.ctx) throw Error("2D canvas unavailable");
     this._key=e=>this._keyEvent(e); this._pointer=e=>this._pointerEvent(e);
     this._blur=()=>this.pause(); this._visibility=()=>{if(document.hidden)this.pause();};
+    this._focusout=()=>this._clearInput();
     this.errorElement=document.createElement("div");
     this.errorElement.setAttribute("role","alert"); this.errorElement.setAttribute("aria-live","assertive");
     this.errorElement.hidden=true;
@@ -158,20 +160,27 @@ export class WasmGamePlayer {
     this.canvas.addEventListener("pointerdown",this._pointer); this.canvas.addEventListener("pointerup",this._pointer);
     this.canvas.addEventListener("pointermove",this._pointer); this.canvas.addEventListener("pointercancel",this._pointer);
     window.addEventListener("blur",this._blur); document.addEventListener("visibilitychange",this._visibility);
+    this.canvas.addEventListener("focusout",this._focusout);
   }
   _detachInput() {
     if(!this._inputAttached)return; this._inputAttached=false;
     window.removeEventListener("keydown",this._key);window.removeEventListener("keyup",this._key);
     this.canvas.removeEventListener("pointerdown",this._pointer);this.canvas.removeEventListener("pointerup",this._pointer);this.canvas.removeEventListener("pointermove",this._pointer);this.canvas.removeEventListener("pointercancel",this._pointer);
     window.removeEventListener("blur",this._blur);document.removeEventListener("visibilitychange",this._visibility);
+    this.canvas.removeEventListener("focusout",this._focusout);
   }
   _keyEvent(e) {
     if(!this.manifest.runtime.capabilities.includes("input.keyboard")||!KEY_CODES.has(e.code)) return;
+    // Keyboard input belongs only to the player the user has focused. Without
+    // this guard every mounted game would consume page-level shortcuts.
+    const active=document.activeElement;
+    if(active!==this.canvas && !this.canvas.contains?.(active)) return;
     if(e.type==="keydown"){if(this.held.has(e.code))return;this.held.add(e.code);} else this.held.delete(e.code);
     e.preventDefault(); this._send({type:e.type==="keydown"?"KEY_DOWN":"KEY_UP",code:e.code,modifiers:(e.shiftKey?1:0)|(e.ctrlKey?2:0)|(e.altKey?4:0)|(e.metaKey?8:0),timestamp_micros:this._timestampMicros()});
   }
   _pointerEvent(e) {
     if(!this.manifest.runtime.capabilities.includes("input.pointer")) return;
+    if(e.type==="pointerdown") this.canvas.focus?.({preventScroll:true});
     const now=performance.now(); if(e.type==="pointermove" && now-this.lastPointerMove<16)return; if(e.type==="pointermove")this.lastPointerMove=now;
     const {x,y}=this._logicalPoint(e.clientX,e.clientY);
     const type={pointerdown:"POINTER_DOWN",pointerup:"POINTER_UP",pointermove:"POINTER_MOVE",pointercancel:"POINTER_CANCEL"}[e.type];

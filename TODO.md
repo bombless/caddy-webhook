@@ -56,12 +56,12 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 
 ## P1 — Complete input and timing semantics
 
-- [ ] Normalize keyboard, pointer, touch, and cancellation events into the documented ABI record.
+- [x] Normalize keyboard, pointer, touch (through Pointer Events), and cancellation events into the documented ABI record.
 - [x] Implement logical-canvas coordinate mapping that accounts for scaling and letterboxing; pointer coordinates now map through a centered aspect-ratio viewport and clamp letterbox-bar input to the nearest edge.
-- [ ] Include key-up events and clear input on blur, pause, visibility loss, and disposal.
-- [ ] Define bounded input queue capacity and an explicit overflow policy.
-- [ ] Prevent browser defaults only for keys captured by the active player.
-- [ ] Add an accumulator-based fixed timestep; clamp elapsed time after tab suspension.
+- [x] Include key-up events and clear input on blur, focus loss, pause, visibility loss, and disposal.
+- [x] Define bounded input queue capacity and an explicit overflow policy: drop new non-release input at capacity while reserving 32 slots for key-release events.
+- [x] Prevent browser defaults only for keys captured by the active player; the canvas is focusable and pointer interaction focuses it.
+- [x] Add an accumulator-based fixed timestep; clamp elapsed time after tab suspension.
 - [ ] Separate simulation tick rate from render/presentation rate and cap both.
 - [ ] Make deterministic replay possible without relying on wall-clock timing.
 
@@ -206,3 +206,12 @@ CI validation (2026-11-04): initial runs [41841293121](https://github.com/bomble
 - Added a positive control proving the unmodified real WASM fixture still initializes successfully.
 - This closes the unit-test gap for per-export signature rejection; it does not replace browser Canvas/focus/held-key tests or deterministic game-state replay.
 - GitHub Actions runs [41856808074](https://github.com/bombless/caddy-webhook/actions/runs/41856808074) and [41856998908](https://github.com/bombless/caddy-webhook/actions/runs/41856998908) passed. The follow-up test uses a different *valid* function type with incompatible arity for each export (rather than an out-of-range type index), proving the preflight catches genuine signature mismatches before instantiation. Latest test commit: `7f03bdcb06915ec832c19a359897634ba651736a`.
+
+## Implementation progress (2026-11-04, focused-player input)
+
+- Made the player canvas keyboard-focusable and focus it on pointer-down.
+- Only the focused canvas (or one of its descendants) receives supported keyboard input and browser-default suppression; multiple mounted players no longer all capture the same page-level keys.
+- Focus loss sends `KEY_UP` for held keys; the focusout listener is detached during player cleanup.
+- Documented Pointer Events as the unified pointer/touch path, the bounded input overflow policy, and fixed-step timing behavior.
+- Added a regression test for unfocused-key passthrough, focused-key capture, focus-loss release, and pointer-to-focus behavior.
+- Local validation: `npm run check:wasm` and `npm run test:wasm` pass (25 tests). Browser-level focus/Canvas validation and deterministic game-state replay remain outstanding.

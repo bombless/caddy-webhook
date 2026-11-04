@@ -25,7 +25,16 @@ await player.load(new URL("./games/pixel-snake/", location.href));
 ```
 
 Call `pause()`, `resume()`, and `dispose()` with the owning player lifecycle.
-The runtime requires a dedicated Worker, Canvas 2D, and module-capable browser.
+The canvas is keyboard-focusable; pointer interaction focuses it, and only the
+focused player captures supported keys or prevents their browser defaults.
+When focus leaves the canvas, held keys receive `KEY_UP`. Blur, hidden-page,
+pause, and disposal paths also clear held input. Pointer and touch input use
+Pointer Events and are normalized to logical canvas coordinates after
+letterboxing. Input is bounded by `maxQueue`; new non-release events are
+dropped at capacity while up to 32 additional slots are reserved for key-up
+cleanup events. Simulation uses a fixed 1/60 s step and clamps accumulated
+elapsed time after suspension. The runtime requires a dedicated Worker, Canvas
+2D, and module-capable browser.
 It does not provide audio, persistence, score, or asset capabilities yet;
 manifest capability declarations are requests and do not grant those services.
 

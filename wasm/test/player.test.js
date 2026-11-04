@@ -218,6 +218,47 @@ test("maps pointer coordinates for a vertically letterboxed logical canvas", () 
 });
 
 
+test("keyboard input is captured only by the focused player and focus loss releases held keys", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  const sent = [];
+  const canvas = { contains: element => element?.parent === canvas, focus: () => { focused = true; },
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 320, height: 180 }) };
+  let focused = false;
+  Object.assign(instance, {
+    canvas, width: 320, height: 180,
+    manifest: { runtime: { capabilities: ["input.keyboard", "input.pointer"] } },
+    held: new Set(), startedAt: performance.now(), _send: event => sent.push(event),
+    _focusout: () => instance._clearInput()
+  });
+  const originalDocument = globalThis.document;
+  let prevented = 0;
+  const event = type => ({ type, code: "ArrowLeft", shiftKey: false, ctrlKey: false,
+    altKey: false, metaKey: false, preventDefault: () => { prevented++; } });
+  try {
+    globalThis.document = { activeElement: {} };
+    instance._keyEvent(event("keydown"));
+    assert.equal(prevented, 0);
+    assert.equal(sent.length, 0);
+
+    globalThis.document.activeElement = canvas;
+    instance._keyEvent(event("keydown"));
+    assert.equal(prevented, 1);
+    assert.deepEqual(sent.map(item => item.type), ["KEY_DOWN"]);
+    assert.equal(instance.held.has("ArrowLeft"), true);
+
+    instance._focusout();
+    assert.deepEqual(sent.map(item => item.type), ["KEY_DOWN", "KEY_UP"]);
+    assert.equal(instance.held.size, 0);
+
+    instance._pointerEvent({ type: "pointerdown", clientX: 0, clientY: 0, button: 0,
+      buttons: 1, shiftKey: false, ctrlKey: false, altKey: false });
+    assert.equal(focused, true);
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
 test("resume restarts the fixed-step loop after pause and resets accumulated time", () => {
   const instance = Object.create(WasmGamePlayer.prototype);
   let scheduled;
