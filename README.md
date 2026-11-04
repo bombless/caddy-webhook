@@ -64,8 +64,7 @@ The Caddy example is repository guidance only. It does not update a running Cadd
 
 ## GitHub Actions
 
-- `.github/workflows/deploy.yml` builds/tests and publishes the platform shell to GitHub Pages only from `main`.
-- `.github/workflows/deploy-site.yml` is the whole-site webhook publisher targeting `POST /_deploy` with `DEPLOY_WEBHOOK_URL` and `DEPLOY_TOKEN` secrets.
+- `.github/workflows/deploy.yml` builds/tests and publishes the platform shell to `POST /_deploy` on `main`, using `DEPLOY_WEBHOOK_URL` and `DEPLOY_TOKEN` secrets.
 - `.github/workflows/publish-game.yml` is a manual package-publication workflow. It builds the Vue example package (or accepts a package directory), creates a ZIP with `manifest.json` at its root, and posts it to `/_deploy/game`.
 - The reusable whole-site deployment workflow remains available at `.github/workflows/deploy-static.yml`; its caller must continue to target `/_deploy`. The package workflow's `build_example` input should be disabled when publishing an already-built custom/WASM package directory, so the platform build does not clear that directory.
 
