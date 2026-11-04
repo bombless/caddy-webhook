@@ -240,7 +240,7 @@ export class WasmGamePlayer {
   }
   _clearInput() { for(const code of this.held)this._send({type:"KEY_UP",code,modifiers:0,timestamp_micros:this._timestampMicros()});this.held.clear(); }
   resume() { if(this.disposed||!this.worker||this.running)return;this.running=true;this.last=performance.now();this.lastRender=0;this.acc=0;this._raf=requestAnimationFrame(t=>this._tick(t)); }
-  pause() { if(this.running){this.running=false;cancelAnimationFrame(this._raf);this.simulationMicros+=Math.max(0,Math.round(this.acc*1000000));this.acc=0;} this._clearInput(); }
+  pause() { if(this.running){this.running=false;cancelAnimationFrame(this._raf);this.acc=0;} this._clearInput(); }
   _tick(now) {
     if(!this.running)return;
     const elapsed=Math.min((now-this.last)/1000,0.1);this.last=now;this.acc=Math.min(this.acc+elapsed,0.1);
