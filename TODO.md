@@ -117,6 +117,14 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - [ ] Review the implementation against every requirement in `docs/design/wasm-plugin.md`.
 - [ ] Obtain maintainer review and resolve all review comments before declaring ABI v1 stable.
 
+## Implementation progress (2026-11-04)
+
+- Added a Node.js built-in test harness that executes the actual `wasm/runtime/worker.js` in an isolated VM context.
+- Added initial coverage for initialization, malformed messages/module bytes, import rejection, missing exports, ABI version rejection, framebuffer bounds, and malformed keyboard input.
+- Added `package.json` scripts (`npm run check:wasm`, `npm run test:wasm`) and a GitHub Actions workflow for syntax checks and worker tests.
+- Test limitation: the fixture is a minimal valid WASM container and the harness supplies mocked exports; this exercises worker-side validation and message handling, but does not yet prove real module export/signature conformance. Real valid/invalid ABI fixtures, manifest schema tests, resource-limit tests, watchdog/lifecycle coverage, and browser tests remain outstanding.
+- Tests have not yet been executed in this environment; CI results must be checked after this commit. Do not mark the P0 test section complete until the real fixtures and remaining coverage are added and passing.
+
 ## Handoff / next session
 
 Current working branch: `feat/wasm-plugin-runtime`.

@@ -1,0 +1,12 @@
+{
+  "name": "caddy-webhook-wasm-runtime",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:wasm": "node --test wasm/test/*.test.js",
+    "check:wasm": "node --check wasm/runtime/player.js && node --check wasm/runtime/worker.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
