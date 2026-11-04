@@ -31,6 +31,7 @@ as the valid fixture and one of these defines:
 - `-DGAME_WIDTH=0` — invalid framebuffer dimensions
 - `-DTRAP_ON_UPDATE` — traps during a simulation tick
 - `-DOMIT_RENDER_EXPORT` — exports the render function under the wrong name
+- `-DOVERSIZED_RENDER_LEN` — reports a framebuffer larger than guest memory
 
 The oversized-memory fixture is built with
 `-Wl,--initial-memory=196608` instead of `131072`; the runtime test config
