@@ -189,3 +189,12 @@ CI validation (2026-11-04): initial runs [41841293121](https://github.com/bomble
 
 - Added a focused regression test proving resume restarts the fixed-step animation loop after pause, resets the accumulator, remains idempotent while running, and does not restart after disposal.
 - Existing unit coverage already exercises pause-generated KEY_UP events, bounded graceful disposal, idempotency, fetch cancellation, and watchdog termination. Real-browser focus/blur and held-key integration remain unverified.
+
+
+## Implementation progress (2026-11-04, ABI preflight enforcement)
+
+- Wired the ABI v1 type/function/export-section parser into the Worker INIT path, so all 14 required function signatures and the exported linear memory are checked before WebAssembly compilation/instantiation and before any guest code runs.
+- Kept the existing missing-export error contract consistent with the worker tests.
+- Fixed a stray literal \\n in the worker test source that made the entire worker test module fail to parse (the syntax-check step did not cover test files).
+- GitHub Actions run [41855643294](https://github.com/bombless/caddy-webhook/actions/runs/41855643294) passed JavaScript syntax checks and the full player + worker test suite on commit `6366afb0784b523076897db81ca0d078607fde64`.
+- Real-browser Canvas/focus/held-key integration and deterministic game-state replay remain outstanding; this change does not establish production readiness.
