@@ -89,6 +89,14 @@ class GameDeploymentTests(unittest.TestCase):
         payload = self.archive(self.vue_manifest(game_id, version), {'index.html': '<h1>game</h1>'})
         return self.post('/_deploy/game', payload)
 
+
+    def test_storage_initialization_creates_public_empty_registry(self):
+        path = os.path.join(webhook.ROOT, 'games', 'registry.json')
+        self.assertFalse(os.path.exists(path))
+        webhook.initialize_storage()
+        with open(path, encoding='utf-8') as source:
+            self.assertEqual(json.load(source), {'games': [], 'registryVersion': 1})
+
     def test_health_and_authentication(self):
         self.assertEqual(self.request('GET', '/health')[0], 200)
         payload = self.archive(self.vue_manifest(), {'index.html': 'x'})
