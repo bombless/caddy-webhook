@@ -43,8 +43,8 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 
 ## P0 — Automated ABI and runtime tests
 
-- [ ] Add a minimal valid WASM fixture exporting the required ABI.
-- [ ] Add invalid fixtures: missing exports, wrong ABI version, unexpected imports, malformed memory, invalid pointers, oversized output, invalid dimensions, and trap-on-call.
+- [x] Add a minimal valid WASM fixture exporting the required ABI; the test harness instantiates it with the real WebAssembly engine and verifies input, RGBA output, and shutdown.
+- [x] Add invalid fixtures for missing exports, wrong ABI version, unexpected imports, over-limit memory, invalid pointers, oversized framebuffer, invalid dimensions, and trap-on-call.
 - [ ] Add tests for manifest validation and unsafe entry paths.
 - [ ] Add tests for module/package size limits, memory limits, and output bounds.
 - [ ] Add tests for worker message validation and malformed payloads.
@@ -123,25 +123,26 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - Added initial coverage for initialization, malformed messages/module bytes, import rejection, missing exports, ABI version rejection, framebuffer bounds, and malformed keyboard input.
 - Added `package.json` scripts (`npm run check:wasm`, `npm run test:wasm`) and a GitHub Actions workflow for syntax checks and worker tests.
 - Test limitation: the fixture is a minimal valid WASM container and the harness supplies mocked exports; this exercises worker-side validation and message handling, but does not yet prove real module export/signature conformance. Real valid/invalid ABI fixtures, manifest schema tests, resource-limit tests, watchdog/lifecycle coverage, and browser tests remain outstanding.
-- Fixed the worker's `u32` helper: call sites pass already-evaluated ABI values, so the helper now validates a number rather than invoking it as a function. This was the common cause of all three initial CI failures.
+- Fixed the worker's `u32` helper: call sites pass already-evaluated ABI values, so the helper validates a number rather than invoking it as a function. This was the common cause of all three initial CI failures.
 - Added an accessible player error surface (`role=alert`) with a retry action; load/fetch/manifest/worker failures now surface instead of leaving a blank canvas. Runtime failure cleanup detaches input listeners, clears watchdog state, stops animation, and terminates the worker. Malformed worker messages and invalid frame payloads are rejected.
-- GitHub Actions passed after these changes (see run links in Handoff). The current test fixture still mocks exports around an eight-byte WASM container; this does not prove real ABI export/signature conformance. Do not mark the P0 test section complete until real valid/invalid fixtures and remaining coverage are added.
+- Added a real ABI v1 WASM smoke fixture (C source plus base64 module) and real invalid-module fixtures. The worker tests now instantiate actual modules, verify input/RGBA frame/shutdown, and reject invalid imports, missing exports, wrong ABI version, bad dimensions/pointers, oversized framebuffer, over-limit memory, and traps. Mock-based boundary tests remain as additional coverage.
+- GitHub Actions passes on the current branch (7 test groups, including the real fixture corpus). Remaining P0 gaps include manifest/schema tests, module/package size limits, exact export signature conformance, watchdog/lifecycle tests, and browser Canvas tests.
 
 ## Handoff / next session
 
 Current working branch: `feat/wasm-plugin-runtime`.
 
-Latest branch HEAD: `e3dfbbcf23d4e0fb9bb79a004e16cf9ac110bf77` (`fix: detach failed workers and validate player messages`). Relevant commits: `d9c4a986` fixes numeric ABI value validation in the worker; `2dff6cf` adds the recoverable error UI and failed-load cleanup; `e3dfbbc` hardens listener cleanup and worker-message validation.
+Latest branch HEAD before this TODO refresh: `b92dde98b4e24841dd5ef8245a16343824356f2e`. Relevant implementation commits: `d9c4a986` fixes numeric ABI value validation; `2dff6cf` adds recoverable error UI and failed-load cleanup; `e3dfbbc` hardens listener cleanup and worker-message validation; `ff4bbc9` adds a real valid ABI fixture and smoke test; `7eda64f` adds real invalid fixtures and rejection tests; `1c0e23f` corrects the invalid-pointer assertion to match the earlier numeric guard.
 
-The ABI v1 contract and first-round loader/worker hardening are implemented. The initial three CI failures are fixed and the current CI workflow passes, but **real WASM ABI conformance and browser rendering have not been validated**. Do not describe the runtime as production-ready. Next session should:
+The ABI v1 contract, worker hardening, first recoverable error UI, and a real worker smoke/invalid-fixture suite are now implemented. CI passes, but **complete ABI conformance and browser rendering have not been validated**. Do not describe the runtime as production-ready. Next session should:
 
-1. Add a real minimal valid WASM fixture exporting the required ABI plus invalid fixtures for missing exports, wrong signatures/version, unexpected imports, malformed memory, invalid pointers, oversized output, invalid dimensions, and traps.
-2. Expand worker tests to execute a real module rather than mocked exports; add manifest/schema, resource-limit, watchdog, pause/resume/dispose, and held-input cleanup coverage.
+1. Add explicit export-signature conformance checks/fixtures; current JS boundary checks validate return values and behavior but do not introspect every WASM function signature.
+2. Add manifest/schema validation tests, package/module size-limit tests, watchdog timeout coverage, pause/resume/dispose and held-input cleanup tests, and a deterministic headless game harness.
 3. Run `node --check wasm/runtime/player.js`, `node --check wasm/runtime/worker.js`, and `node --test wasm/test/*.test.js`; keep CI green and record exact results.
 4. Continue the lifecycle audit, including fetch abort/cancellation and disposal edge cases. Browser tests for real Canvas output remain outstanding.
 5. Keep frontend integration explicitly blocked until the actual frontend source/repository and deployment workflow are identified; this repository currently provides the webhook/static deployment side rather than the frontend shell.
 
-CI validation (2026-11-04): initial runs [41841293121](https://github.com/bombless/caddy-webhook/actions/runs/41841293121) and [41841284566](https://github.com/bombless/caddy-webhook/actions/runs/41841284566) failed (2/5 tests passed). After fixing `u32`, run [41841916248](https://github.com/bombless/caddy-webhook/actions/runs/41841916248) passed. After adding the player error UI and cleanup changes, both push run [41842164730](https://github.com/bombless/caddy-webhook/actions/runs/41842164730) and PR run [41842174871](https://github.com/bombless/caddy-webhook/actions/runs/41842174871) passed, including JavaScript syntax checks and all 5 worker tests. No browser validation has been run.
+CI validation (2026-11-04): initial runs [41841293121](https://github.com/bombless/caddy-webhook/actions/runs/41841293121) and [41841284566](https://github.com/bombless/caddy-webhook/actions/runs/41841284566) failed (2/5 tests passed). After fixing `u32`, run [41841916248](https://github.com/bombless/caddy-webhook/actions/runs/41841916248) passed. After player error UI and cleanup changes, push/PR runs [41842164730](https://github.com/bombless/caddy-webhook/actions/runs/41842164730) and [41842174871](https://github.com/bombless/caddy-webhook/actions/runs/41842174871) passed. The real valid-fixture suite passed in [41842645652](https://github.com/bombless/caddy-webhook/actions/runs/41842645652) and [41842658198](https://github.com/bombless/caddy-webhook/actions/runs/41842658198). The expanded invalid-fixture suite initially exposed and corrected an assertion expecting range rejection when the numeric pointer guard rejects first; current push/PR runs [41843258750](https://github.com/bombless/caddy-webhook/actions/runs/41843258750) and [41843273233](https://github.com/bombless/caddy-webhook/actions/runs/41843273233) pass syntax checks and all 7 worker test groups. No browser validation has been run.
 
 ## Suggested execution order
 
