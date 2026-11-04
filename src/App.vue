@@ -26,6 +26,7 @@ const frame = ref<HTMLIFrameElement>()
 const canvas = ref<HTMLCanvasElement>()
 const state = ref<PlayerState | 'loading' | 'ready' | 'running' | 'paused' | 'error'>('loading')
 const score = ref(0)
+const wasmGrantedCapabilities = ref<string[]>([])
 const error = ref('')
 const loadingRegistry = ref(true)
 let vueRuntime: GamePlayerRuntime | undefined
@@ -63,7 +64,7 @@ async function launchSelected() {
     } else if (game.pluginType === 'wasm') {
       if (!canvas.value) throw new Error('WASM canvas is unavailable')
       wasmRuntime = new WasmGamePlayer(canvas.value, {
-        grantedCapabilities: [],
+        grantedCapabilities: wasmGrantedCapabilities.value,
         onError: (value: Error) => { error.value = value.message; state.value = 'error' },
       })
       await wasmRuntime.load(new URL('.', new URL(game.manifestUrl, window.location.href)))
@@ -75,6 +76,17 @@ async function launchSelected() {
     error.value = value instanceof Error ? value.message : String(value)
     state.value = 'error'
   }
+}
+
+function selectGame(id: string) {
+  wasmGrantedCapabilities.value = []
+  selectedId.value = id
+  void launchSelected()
+}
+
+function grantWasmControls() {
+  wasmGrantedCapabilities.value = ['input.keyboard', 'input.pointer']
+  void launchSelected()
 }
 
 async function loadRegistry() {
@@ -164,7 +176,7 @@ onBeforeUnmount(() => {
         type="button"
         :aria-pressed="selectedId === game.id"
         :class="{ selected: selectedId === game.id }"
-        @click="selectedId = game.id; launchSelected()"
+        @click="selectGame(game.id)"
       >{{ game.name }} <small>{{ game.pluginType }} · {{ game.latestVersion }}</small></button>
     </nav>
     <section class="stage">
@@ -183,6 +195,13 @@ onBeforeUnmount(() => {
         aria-label="WASM game"
         tabindex="0"
       />
+      <div v-if="selectedGame()?.pluginType === 'wasm'" class="permission-row">
+        <span v-if="wasmGrantedCapabilities.length">Keyboard and pointer input allowed for this session.</span>
+        <span v-else>Keyboard and pointer input are blocked by default.</span>
+        <button v-if="!wasmGrantedCapabilities.length" type="button" @click="grantWasmControls">
+          Allow game controls
+        </button>
+      </div>
       <div v-if="state === 'error'" class="error" role="alert">
         <strong>Unable to load game</strong><p>{{ error }}</p>
       </div>
