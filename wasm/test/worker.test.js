@@ -8,7 +8,7 @@ const validModule = Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0]).buffer;
 const realModuleBase64 = (await readFile(new URL("./fixtures/minimal-valid.wasm.b64", import.meta.url), "utf8")).trim();
 const realModule = Uint8Array.from(Buffer.from(realModuleBase64, "base64")).buffer;
 const invalidFixtures = JSON.parse(await readFile(new URL("./fixtures/invalid-fixtures.json", import.meta.url), "utf8"));
-const fixtureBytes = name => Uint8Array.from(Buffer.from(invalidFixtures[name], "base64")).buffer;\n
+const fixtureBytes = name => Uint8Array.from(Buffer.from(invalidFixtures[name], "base64")).buffer;
 function wrongGameInitSignature(moduleBytes) {
   const bytes = new Uint8Array(moduleBytes.slice(0));
   const read = state => {
