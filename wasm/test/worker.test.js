@@ -13,7 +13,7 @@ const fixtureBytes = name => Uint8Array.from(Buffer.from(invalidFixtures[name], 
 function realHarness() {
   const messages = [];
   const scope = {
-    WebAssembly, Uint8Array, ArrayBuffer, TextEncoder, JSON, Number, Math, Set, Error,
+    WebAssembly, Uint8Array, ArrayBuffer, TextEncoder, TextDecoder, JSON, Number, Math, Set, Error,
     postMessage: message => messages.push(message),
     close() {}
   };
