@@ -84,3 +84,48 @@ test("readLimited requires a streaming body", async () => {
   await assert.rejects(readLimited({ headers: { get: () => null }, body: null }, 10, "manifest"),
     /streaming response body required/);
 });
+
+
+test("watchdog timeout terminates the worker and reports a recoverable error", async () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  let terminated = 0;
+  let reported;
+  let posted;
+  instance.options = { watchdogMs: 5 };
+  instance.worker = { postMessage: message => { posted = message; }, terminate: () => { terminated++; } };
+  instance.pendingInputs = 2;
+  instance._busy = false;
+  instance._watchdogTimer = null;
+  instance.running = true;
+  instance.pause = () => { instance.running = false; };
+  instance._reportError = error => { reported = error; };
+
+  instance._timedPost({ type: "TICK", dtMicros: 16667 });
+  assert.deepEqual(posted, { type: "TICK", dtMicros: 16667 });
+  await new Promise(resolve => setTimeout(resolve, 25));
+
+  assert.equal(terminated, 1);
+  assert.equal(instance.worker, null);
+  assert.equal(instance.pendingInputs, 0);
+  assert.equal(instance._busy, false);
+  assert.match(reported.message, /watchdog timeout/);
+});
+
+test("pause sends key-up events for every held key", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  const sent = [];
+  instance.running = false;
+  instance.held = new Set(["KeyW", "ArrowLeft"]);
+  instance.worker = { postMessage: message => sent.push(message) };
+  instance.pendingInputs = 0;
+  instance.options = { maxQueue: 128 };
+  instance.inputWindowStart = 0;
+  instance.inputCount = 0;
+  instance.startedAt = performance.now();
+
+  instance.pause();
+
+  assert.deepEqual(sent.map(message => message.event.type), ["KEY_UP", "KEY_UP"]);
+  assert.deepEqual(sent.map(message => message.event.code), ["KeyW", "ArrowLeft"]);
+  assert.equal(instance.held.size, 0);
+});
