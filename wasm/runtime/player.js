@@ -92,6 +92,7 @@ export class WasmGamePlayer {
     } finally { this.loading=false; }
   }
   _reportError(error) {
+    this.pause(); this._detachInput();
     const message=error instanceof Error?error.message:String(error);
     this.errorMessage.textContent="Game unavailable: "+message;
     this.retryButton.hidden=!this._lastLoad||this.disposed;
@@ -122,13 +123,17 @@ export class WasmGamePlayer {
     if(Object.keys(w).some(k=>!["abi","abiVersion","maxMemoryPages","maxOutputBytes","renderMode"].includes(k))) throw Error("unknown WASM field");
   }
   _message(data) {
+    if(!data||typeof data!=="object"||typeof data.type!=="string"){this._reportError(Error("malformed worker message"));return;}
     if(data.type==="INPUT_ACK"){this.pendingInputs=Math.max(0,this.pendingInputs-1);return;}
     if(data.type==="ERROR"){
       clearTimeout(this._watchdogTimer); this._watchdogTimer=null; this._busy=false;
       this.pause();this.worker?.terminate();this.worker=null;this.pendingInputs=0;
       this._reportError(new Error(data.message));return;
     }
-    if(data.type==="FRAME" && data.width===this.width && data.height===this.height && data.frame instanceof ArrayBuffer && data.frame.byteLength===this.width*this.height*4) {
+    if(data.type==="FRAME") {
+      if(data.width!==this.width||data.height!==this.height||!(data.frame instanceof ArrayBuffer)||data.frame.byteLength!==this.width*this.height*4) {
+        this._reportError(Error("invalid framebuffer message from worker")); return;
+      }
       clearTimeout(this._watchdogTimer); this._watchdogTimer=null; this._busy=false;
       this.ctx.putImageData(new ImageData(new Uint8ClampedArray(data.frame),this.width,this.height),0,0);
     }
