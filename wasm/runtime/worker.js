@@ -5,7 +5,7 @@ const required = ["game_abi_version","game_init","game_update","game_input","gam
 let instance, memory, ex, limits, config, stopped = false;
 const fail = message => { postMessage({type:"ERROR",message:String(message).slice(0,240)}); stopped=true; };
 function checkMemory() {
-  if(memory.buffer.byteLength > limits.maxMemoryPages*65536) throw Error("WASM memory limit exceeded");
+  if(!(memory instanceof WebAssembly.Memory) || memory.buffer.byteLength > limits.maxMemoryPages*65536) throw Error("WASM memory limit exceeded");
 }
 function range(ptr,len) {
   checkMemory();
@@ -21,8 +21,13 @@ function dimensions() {
 }
 onmessage = async ({data}) => {
   try {
+    if(!data || typeof data!=="object" || typeof data.type!=="string") throw Error("malformed worker message");
     if(data.type==="INIT") {
+      if(instance || !data.limits || !data.config || !(data.bytes instanceof ArrayBuffer)) throw Error("malformed INIT message");
       limits=data.limits; config=data.config;
+      if(!Number.isInteger(limits.maxMemoryPages)||limits.maxMemoryPages<1||limits.maxMemoryPages>256||
+         !Number.isInteger(limits.maxOutputBytes)||limits.maxOutputBytes<4||limits.maxOutputBytes>4*1024*1024||
+         data.bytes.byteLength<8||data.bytes.byteLength>16*1024*1024) throw Error("invalid runtime limits or module size");
       const module=await WebAssembly.compile(data.bytes);
       if(WebAssembly.Module.imports(module).length) throw Error("WASM imports are not permitted");
       instance=await WebAssembly.instantiate(module,{});
@@ -32,8 +37,9 @@ onmessage = async ({data}) => {
       memory=ex.memory; checkMemory();
       if(ex.game_abi_version()!==1) throw Error("unsupported game ABI version");
       const bytes=new TextEncoder().encode(JSON.stringify(config));
+      if(bytes.length>64*1024) throw Error("config exceeds host limit");
       const cp=u32(ex.game_get_config_buffer_ptr()),cc=u32(ex.game_get_config_buffer_capacity());
-      if(bytes.length>cc) throw Error("config exceeds guest buffer");
+      if(cc>64*1024 || bytes.length>cc) throw Error("config exceeds guest buffer/limit");
       new Uint8Array(memory.buffer,range(cp,bytes.length),bytes.length).set(bytes);
       status(ex.game_init(cp,bytes.length),"game_init");
       const d=dimensions();
@@ -43,12 +49,14 @@ onmessage = async ({data}) => {
       range(rp,d.bytes);
       postMessage({type:"READY",width:d.width,height:d.height});
     } else if(data.type==="INPUT" && !stopped) {
+      if(!data.event || typeof data.event!=="object" || Array.isArray(data.event)) throw Error("malformed input event");
       const bytes=new TextEncoder().encode(JSON.stringify(data.event));
       const p=u32(ex.game_get_input_buffer_ptr()),cap=u32(ex.game_get_input_buffer_capacity());
-      if(bytes.length>cap) throw Error("input event exceeds guest buffer");
+      if(cap>4096 || bytes.length>cap) throw Error("input event exceeds guest buffer/limit");
       new Uint8Array(memory.buffer,range(p,bytes.length),bytes.length).set(bytes);
       status(ex.game_input(p,bytes.length),"game_input");
     } else if(data.type==="TICK" && !stopped) {
+      if(data.dtMicros!==16667) throw Error("invalid fixed timestep");
       status(ex.game_update(data.dtMicros),"game_update");
       const d=dimensions(),ptr=u32(ex.game_get_render_buffer_ptr()),len=u32(ex.game_get_render_buffer_len());
       if(len<d.bytes) throw Error("render buffer too small");
@@ -59,6 +67,8 @@ onmessage = async ({data}) => {
       postMessage({type:"FRAME",width:d.width,height:d.height,frame:frame.buffer},[frame.buffer]);
     } else if(data.type==="SHUTDOWN" && !stopped) {
       stopped=true; try { ex.game_shutdown(); } finally { close(); }
+    } else if(data.type!=="INIT" && data.type!=="SHUTDOWN") {
+      throw Error("unknown worker message type");
     }
   } catch(e) { fail(e && e.message || e); }
 };
