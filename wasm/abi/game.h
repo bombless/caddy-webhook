@@ -18,6 +18,7 @@ uint32_t game_abi_version(void);
 int32_t game_init(uint32_t config_ptr, uint32_t config_len);
 int32_t game_update(uint32_t dt_micros);
 int32_t game_input(uint32_t event_ptr, uint32_t event_len);
+/* Returns exactly width * height * 4 bytes written, or a negative error. */
 int32_t game_render(uint32_t output_ptr, uint32_t output_capacity);
 void game_shutdown(void);
 
