@@ -153,7 +153,9 @@ def _validate_manifest(data):
             raise InvalidArchiveError('invalid WASM memory limit')
         if isinstance(output, bool) or not isinstance(output, int) or not 4 <= output <= 4194304:
             raise InvalidArchiveError('invalid WASM output limit')
-        if display.get('pixelScale', 'fit') not in ('integer', 'fit') or display.get('orientation', 'any') not in ('landscape', 'portrait', 'any'):\n            raise InvalidArchiveError('invalid WASM display options')\n        if wasm.get('renderMode') != 'rgba':
+        if display.get('pixelScale', 'fit') not in ('integer', 'fit') or display.get('orientation', 'any') not in ('landscape', 'portrait', 'any'):
+            raise InvalidArchiveError('invalid WASM display options')
+        if wasm.get('renderMode') != 'rgba':
             raise InvalidArchiveError('unsupported WASM render mode')
     return manifest
 
