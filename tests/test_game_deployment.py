@@ -36,6 +36,7 @@ class GameDeploymentTests(unittest.TestCase):
         self.tempdir.cleanup()
 
     def request(self, method, path, body=None, headers=None):
+        print('TEST HTTP body bytes:', None if body is None else len(body), 'headers:', headers)
         connection = http.client.HTTPConnection('127.0.0.1', self.port, timeout=10)
         connection.request(method, path, body=body, headers=headers or {})
         response = connection.getresponse()
