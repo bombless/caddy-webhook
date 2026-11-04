@@ -54,9 +54,8 @@ def _version_parts(value):
     match = VERSION_PATTERN.fullmatch(value) if isinstance(value, str) else None
     if not match:
         raise InvalidArchiveError('version must be semantic version')
-    major, minor, patch, prerelease, _build = match.groups()
-    pre = None
-    if prerelease is not None:
+    major, minor, patch, prerelease, build = match.groups()
+    if build is not None and any(not part for part in build.split('.')):\n        raise InvalidArchiveError('invalid semantic version build metadata')\n    pre = None\n    if prerelease is not None:
         identifiers = prerelease.split('.')
         if any(not part for part in identifiers):
             raise InvalidArchiveError('invalid semantic version prerelease')
@@ -99,6 +98,8 @@ def _validate_manifest(data):
         raise InvalidArchiveError('manifest is not strict UTF-8 JSON') from exc
     if not isinstance(manifest, dict):
         raise InvalidArchiveError('manifest must be an object')
+    if set(manifest) - {'manifestVersion', 'id', 'name', 'version', 'pluginType', 'entry', 'runtime'}:
+        raise InvalidArchiveError('unknown manifest field')
     if isinstance(manifest.get('manifestVersion'), bool) or manifest.get('manifestVersion') != 1:
         raise InvalidArchiveError('unsupported manifest version')
     game_id = manifest.get('id')
@@ -124,9 +125,13 @@ def _validate_manifest(data):
             len(set(capabilities)) != len(capabilities)):
         raise InvalidArchiveError('invalid runtime capabilities')
     if plugin_type == 'vue3':
+        if set(runtime) - {'apiVersion', 'display', 'capabilities'}:
+            raise InvalidArchiveError('unknown Vue3 runtime field')
         display = runtime.get('display')
         if not isinstance(display, dict):
             raise InvalidArchiveError('Vue3 runtime display declaration is required')
+        if set(display) - {'aspectRatio', 'orientation', 'resize'}:
+            raise InvalidArchiveError('unknown Vue3 display field')
         if display.get('orientation', 'any') not in ('landscape', 'portrait', 'any'):
             raise InvalidArchiveError('invalid display orientation')
         if display.get('resize', 'contain') not in ('contain', 'cover'):
@@ -138,10 +143,16 @@ def _validate_manifest(data):
         if entry != 'index.html':
             raise InvalidArchiveError('Vue3 package entry must be index.html')
     else:
+        if set(runtime) - {'apiVersion', 'display', 'capabilities', 'wasm'}:
+            raise InvalidArchiveError('unknown WASM runtime field')
         display = runtime.get('display')
         wasm = runtime.get('wasm')
         if not entry.endswith('.wasm') or not isinstance(display, dict) or not isinstance(wasm, dict):
             raise InvalidArchiveError('invalid WASM runtime declaration')
+        if set(display) - {'width', 'height', 'pixelScale', 'orientation'}:
+            raise InvalidArchiveError('unknown WASM display field')
+        if set(wasm) - {'abi', 'abiVersion', 'maxMemoryPages', 'maxOutputBytes', 'renderMode'}:
+            raise InvalidArchiveError('unknown WASM ABI field')
         for dimension in ('width', 'height'):
             value = display.get(dimension)
             if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 1024:
