@@ -29,7 +29,7 @@ export class WasmGamePlayer {
     this.canvas=canvas; this.options={...DEFAULTS,...options}; this.inputWindowStart=0; this.inputCount=0; this.lastPointerMove=0; this.pendingInputs=0; this._watchdogTimer=null; this.startedAt=0; this.held=new Set(); this.running=false; this.disposed=false; this.last=0; this.acc=0; this.step=1/60; this.worker=null;
     this.ctx=canvas.getContext("2d",{alpha:false}); if(!this.ctx) throw Error("2D canvas unavailable");
     this._key=e=>this._keyEvent(e); this._pointer=e=>this._pointerEvent(e);
-    this._blur=()=>this._clearInput(); this._visibility=()=>{if(document.hidden)this.pause();};
+    this._blur=()=>this.pause(); this._visibility=()=>{if(document.hidden)this.pause();};
   }
   async load(packageUrl, config={}) {
     if(this.disposed) throw Error("player disposed");
