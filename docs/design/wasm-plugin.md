@@ -170,7 +170,7 @@ This mode can reduce framebuffer traffic and improve vector/text rendering, but 
 
 ## 6. Input contract
 
-The host captures browser keyboard, pointer, touch, and (optionally) gamepad events. It normalizes them into a compact event record and passes them to `game_input` or writes them into a bounded event queue.
+The host captures browser keyboard, pointer, touch, and (optionally) gamepad events. It normalizes them into a compact event record and passes them to `game_input` or writes them into a bounded event queue. Input timestamps use the monotonic simulation clock; paused wall time is excluded. The Worker queues bounded input records and delivers each immediately before the first fixed update whose simulation time reaches its timestamp. This preserves short key transitions when multiple updates are batched into one presentation frame.
 
 Proposed logical fields:
 
@@ -194,7 +194,7 @@ Requirements:
 
 ## 7. Timing and deterministic updates
 
-Use a fixed simulation timestep (for example 16,667 microseconds) with an accumulator in the host. Pass fixed `dt` values to `game_update`; render at the display refresh rate or a bounded rate.
+Use a fixed simulation timestep (16,667 microseconds for ABI v1) with an accumulator in the host. Simulation and presentation rates are independent: the host may batch multiple fixed `game_update` calls before one `game_render` call, and must cap both the update batch and presentation rate. The current runtime defaults to 60 Hz simulation, 30 FPS presentation, and at most six updates per rendered frame. Pass the same fixed `dt` value to every update; never replace catch-up with a large variable delta.
 
 The host should clamp large elapsed times after tab suspension and should not pass an arbitrarily large delta to the module. For deterministic tests, allow the harness to supply an exact sequence of input events and fixed update ticks.
 
@@ -276,6 +276,7 @@ Never trust guest pointers, dimensions, lengths, return values, or event payload
 - [ ] Input coordinates map correctly to logical canvas coordinates.
 - [ ] Key-up, blur, pause, and disposal cannot leave stuck controls.
 - [ ] Fixed-step update is stable after tab suspension.
+- [x] Simulation and presentation rates are independently capped; Worker tick batches are bounded and use fixed deltas.
 - [ ] Worker timeout and termination recover cleanly.
 - [ ] Storage/audio/score events are bounded and namespaced.
 - [ ] The game runs without knowledge of the public host or `/app/` path.

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1118">
+  <meta name="description" content="A tiny WASM game running inside the Bombless browser plugin runtime.">
+  <title>WASM Arcade — Bombless Runtime Demo</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="./"><span class="brand-mark">B</span><span>BOMBLESS <small>WASM LAB</small></span></a>
+      <span class="branch"><i></i> BRANCH PREVIEW</span>
+    </header>
+    <section class="intro">
+      <p class="eyebrow">BROWSER GAME RUNTIME / ABI V1</p>
+      <h1>Small games.<br><em>Sandboxed worlds.</em></h1>
+      <p class="lede">A tiny Snake game, compiled to WebAssembly and executed in a dedicated Worker. The host owns the canvas, input and lifecycle. The guest owns the pixels.</p>
+    </section>
+    <section class="arcade">
+      <div class="game-shell">
+        <div class="game-head"><div><span class="live-dot"></span> LIVE SESSION <span class="session-id">#WASM-001</span></div><span id="fps">60 HZ SIM</span></div>
+        <div class="screen-wrap"><canvas id="game" aria-label="Snake game. Focus the game and use arrow keys or WASD." tabindex="0"></canvas><div id="loading" class="loading">BOOTING WASM MODULE<span>COMPILING SANDBOX…</span></div></div>
+        <div class="game-controls"><div><span class="keycap">↑</span><span class="keycap">←</span><span class="keycap">↓</span><span class="keycap">→</span><span class="or">OR</span><span class="keycap">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span></div><span class="control-note">CLICK CANVAS TO FOCUS</span></div>
+      </div>
+      <aside class="side-panel">
+        <div class="panel-title">RUNTIME STATUS <span class="status-pill" id="status">STARTING</span></div>
+        <div class="metric"><span>EXECUTION</span><b>WebAssembly</b></div>
+        <div class="metric"><span>ISOLATION</span><b>Dedicated Worker</b></div>
+        <div class="metric"><span>ABI VERSION</span><b>v1.0</b></div>
+        <div class="metric"><span>FRAMEBUFFER</span><b>160 × 120 RGBA</b></div>
+        <div class="metric"><span>CAPABILITIES</span><b>Keyboard · Pointer</b></div>
+        <div class="panel-divider"></div>
+        <div class="panel-title">HOST CONTROLS</div>
+        <div class="actions"><button id="pause" disabled>Pause runtime</button><button id="restart" class="secondary">Restart session ↗</button></div>
+        <p class="hint">Pause freezes simulation time and releases held keys. Restart creates a fresh Worker and WASM instance.</p>
+        <div class="panel-divider"></div>
+        <div class="panel-title">EVENT STREAM <span class="stream-live">● LIVE</span></div>
+        <ol id="events" class="events"><li><time>00:00</time><span>Waiting for module…</span></li></ol>
+      </aside>
+    </section>
+    <footer><span>BUILT ON BOMBLESS GAME ABI</span><span>GUEST MEMORY IS NOT HOST MEMORY.</span></footer>
+  </main>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
