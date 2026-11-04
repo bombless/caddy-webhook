@@ -173,10 +173,22 @@ export class WasmGamePlayer {
   _pointerEvent(e) {
     if(!this.manifest.runtime.capabilities.includes("input.pointer")) return;
     const now=performance.now(); if(e.type==="pointermove" && now-this.lastPointerMove<16)return; if(e.type==="pointermove")this.lastPointerMove=now;
-    const r=this.canvas.getBoundingClientRect(),x=(e.clientX-r.left)*this.width/r.width,y=(e.clientY-r.top)*this.height/r.height;
+    const {x,y}=this._logicalPoint(e.clientX,e.clientY);
     const type={pointerdown:"POINTER_DOWN",pointerup:"POINTER_UP",pointermove:"POINTER_MOVE",pointercancel:"POINTER_CANCEL"}[e.type];
     if(type!=="POINTER_MOVE" && this.canvas.setPointerCapture && e.type==="pointerdown") this.canvas.setPointerCapture(e.pointerId);
     this._send({type,x:Math.max(0,Math.min(this.width,x)),y:Math.max(0,Math.min(this.height,y)),code:e.button,buttons:e.buttons,modifiers:(e.shiftKey?1:0)|(e.ctrlKey?2:0)|(e.altKey?4:0),timestamp_micros:this._timestampMicros()});
+  }
+  _logicalPoint(clientX,clientY) {
+    const r=this.canvas.getBoundingClientRect();
+    if(!Number.isFinite(r.width)||!Number.isFinite(r.height)||r.width<=0||r.height<=0) return {x:0,y:0};
+    // Treat the CSS box as a letterboxed viewport for the logical game aspect ratio.
+    const scale=Math.min(r.width/this.width,r.height/this.height);
+    const contentWidth=this.width*scale,contentHeight=this.height*scale;
+    const left=r.left+(r.width-contentWidth)/2,top=r.top+(r.height-contentHeight)/2;
+    return {
+      x:Math.max(0,Math.min(this.width,(clientX-left)/scale)),
+      y:Math.max(0,Math.min(this.height,(clientY-top)/scale))
+    };
   }
   _timestampMicros() { return Math.max(0,Math.round((performance.now()-this.startedAt)*1000)); }
   _send(event) {

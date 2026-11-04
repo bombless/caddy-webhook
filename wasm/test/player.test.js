@@ -186,3 +186,33 @@ test("dispose performs bounded worker shutdown and is idempotent", async () => {
   assert.equal(instance.worker, null);
   assert.equal(instance.disposed, true);
 });
+
+
+test("maps pointer coordinates through CSS scaling and centered letterboxing", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  instance.width = 320;
+  instance.height = 180;
+  instance.canvas = { getBoundingClientRect: () => ({
+    left: 10, top: 20, width: 640, height: 480
+  }) };
+  // The 16:9 logical canvas occupies 640x360 inside a 640x480 box.
+  assert.deepEqual(instance._logicalPoint(10, 80), { x: 0, y: 0 });
+  assert.deepEqual(instance._logicalPoint(330, 260), { x: 160, y: 90 });
+  assert.deepEqual(instance._logicalPoint(650, 440), { x: 320, y: 180 });
+  // Pointer positions in the letterbox bars clamp to the nearest game edge.
+  assert.deepEqual(instance._logicalPoint(330, 20), { x: 160, y: 0 });
+  assert.deepEqual(instance._logicalPoint(330, 500), { x: 160, y: 180 });
+});
+
+test("maps pointer coordinates for a vertically letterboxed logical canvas", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  instance.width = 320;
+  instance.height = 180;
+  instance.canvas = { getBoundingClientRect: () => ({
+    left: 0, top: 0, width: 800, height: 360
+  }) };
+  // A 640x360 game viewport is centered in the wider CSS box.
+  assert.deepEqual(instance._logicalPoint(80, 180), { x: 0, y: 90 });
+  assert.deepEqual(instance._logicalPoint(400, 180), { x: 160, y: 90 });
+  assert.deepEqual(instance._logicalPoint(720, 180), { x: 320, y: 90 });
+});

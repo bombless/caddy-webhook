@@ -57,7 +57,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 ## P1 — Complete input and timing semantics
 
 - [ ] Normalize keyboard, pointer, touch, and cancellation events into the documented ABI record.
-- [ ] Implement logical-canvas coordinate mapping that accounts for scaling and letterboxing.
+- [x] Implement logical-canvas coordinate mapping that accounts for scaling and letterboxing; pointer coordinates now map through a centered aspect-ratio viewport and clamp letterbox-bar input to the nearest edge.
 - [ ] Include key-up events and clear input on blur, pause, visibility loss, and disposal.
 - [ ] Define bounded input queue capacity and an explicit overflow policy.
 - [ ] Prevent browser defaults only for keys captured by the active player.
