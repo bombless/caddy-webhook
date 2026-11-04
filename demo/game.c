@@ -16,6 +16,14 @@ static int sx[MAX_SNAKE], sy[MAX_SNAKE];
 static int length, dx, dy, food_x, food_y, ticks, score, over;
 static u32 random_state = 0xB04B1E55u;
 
+/* Tiny freestanding memmove used by LLVM's loop-idiom optimization. */
+void *memmove(void *dst, const void *src, u32 n) {
+  u8 *d=(u8 *)dst; const u8 *s=(const u8 *)src;
+  if(d<s) for(u32 i=0;i<n;i++) d[i]=s[i];
+  else if(d>s) for(u32 i=n;i>0;i--) d[i-1]=s[i-1];
+  return dst;
+}
+
 static int contains(const u8 *p, u32 n, const char *s) {
   u32 i = 0, j;
   while (s[i]) i++;
