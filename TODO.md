@@ -15,25 +15,25 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 ## P0 — Make ABI v1 precise and internally consistent
 
 - [ ] Review the current header and runtime against the design proposal; resolve signature and ownership mismatches before treating ABI v1 as stable.
-- [ ] Specify every export's exact WASM signature, required/optional status, lifecycle state, and return-code behavior.
-- [ ] Specify the framebuffer contract: width, height, RGBA byte order, top-left origin, row stride, straight/premultiplied alpha, and buffer ownership.
-- [ ] Specify how the guest exposes framebuffer pointer, capacity, and dimensions; validate all values and integer arithmetic before creating memory views.
-- [ ] Specify config and input wire formats, including UTF-8 handling, record layout, enum values, timestamp units, and maximum lengths.
-- [ ] Define behavior when guest memory grows; recreate all views after calls that may grow memory and copy frame data before guest mutation.
-- [ ] Define whether render writes into a host-provided buffer or a guest-owned framebuffer; make header, worker, and sample modules use the same contract.
-- [ ] Define ABI error codes and host behavior for every failure path.
-- [ ] Add ABI version negotiation and reject unsupported versions cleanly.
+- [x] Specify every export's exact WASM signature, required/optional status, lifecycle state, and return-code behavior.
+- [x] Specify the framebuffer contract: width, height, RGBA byte order, top-left origin, row stride, straight/premultiplied alpha, and buffer ownership.
+- [x] Specify how the guest exposes framebuffer pointer, capacity, and dimensions; validate all values and integer arithmetic before creating memory views.
+- [x] Specify config and input wire formats, including UTF-8 handling, record layout, enum values, timestamp units, and maximum lengths.
+- [x] Define behavior when guest memory grows; recreate all views after calls that may grow memory and copy frame data before guest mutation.
+- [x] Define whether render writes into a host-provided buffer or a guest-owned framebuffer; make header, worker, and sample modules use the same contract.
+- [x] Define ABI error codes and host behavior for every failure path.
+- [x] Add ABI version negotiation and reject unsupported versions cleanly.
 
 ## P0 — Security and runtime hardening
 
-- [ ] Enforce package and manifest size limits before parsing or instantiating.
-- [ ] Enforce WASM byte limits while streaming downloads; also enforce the limit when the response has no trustworthy `Content-Length`.
+- [x] Enforce package and manifest size limits before parsing or instantiating.
+- [x] Enforce WASM byte limits while streaming downloads; also enforce the limit when the response has no trustworthy `Content-Length`.
 - [ ] Validate manifest fields against the schema in the actual browser runtime (or document and implement the chosen validator strategy).
-- [ ] Validate package-relative paths: reject absolute paths, schemes, traversal segments, backslashes where unsafe, and malformed/encoded traversal.
-- [ ] Resolve `entry` and assets relative to the package base URL without assuming the site's hostname or `/app/` mount path.
-- [ ] Keep imports explicitly allowlisted; verify that WASI, network, filesystem, DOM, and other ambient capabilities cannot be imported.
-- [ ] Verify memory limits against the actual instantiated memory, including modules that declare or grow memory unexpectedly.
-- [ ] Bound every message, input queue, event queue, render payload, and host capability request.
+- [x] Validate package-relative paths: reject absolute paths, schemes, traversal segments, backslashes where unsafe, and malformed/encoded traversal.
+- [x] Resolve `entry` and assets relative to the package base URL without assuming the site's hostname or `/app/` mount path.
+- [x] Keep imports explicitly allowlisted; verify that WASI, network, filesystem, DOM, and other ambient capabilities cannot be imported.
+- [x] Verify memory limits against the actual instantiated memory, including modules that declare or grow memory unexpectedly.
+- [x] Bound every message, input queue, event queue, render payload, and host capability request.
 - [ ] Validate pointers, lengths, dimensions, multiplication/addition overflow, enum values, numeric finiteness, and guest return values at every boundary.
 - [ ] Define watchdog semantics and test that an unresponsive guest can be terminated without blocking the main thread.
 - [ ] Handle worker errors, traps, malformed messages, fetch failures, aborts, and disposal without leaking workers, listeners, object URLs, or animation callbacks.
