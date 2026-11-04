@@ -73,7 +73,7 @@ function validateAbiSignatures(bytes) {
   };
   for (const [name, signature] of Object.entries(expected)) {
     const item = exports.get(name);
-    if (!item || item.kind !== 0) throw Error("missing function export: " + name);
+    if (!item || item.kind !== 0) throw Error("missing export: " + name);
     const typeIndex = functions[item.index];
     const type = types[typeIndex];
     if (!type || type.params !== signature[0] || type.results !== signature[1]) {
