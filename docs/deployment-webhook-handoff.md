@@ -33,7 +33,7 @@ Expected layout:
       assets/...
 ```
 
-The webhook service account must be able to create and rename files/directories in `tmp/`, `releases/`, and `games/`. Caddy needs read and directory-traverse permissions for `games/` and the active site release. Preserve the existing ownership model, group access, setgid directory policy, and restrictive umask when provisioning the new `games/` tree. The current systemd unit restricts writes to `/var/lib/static-deploy`; verify the deployed unit still has this allowance.
+The webhook service account must be able to create and rename files/directories in `tmp/`, `releases/`, and `games/`. Caddy needs read and directory-traverse permissions for `games/` and the active site release. With the repository's systemd unit (`User=deployhook`, `Group=deployhook`, `SupplementaryGroups=caddy`), provision the persistent game root as `deployhook:caddy` with mode `2750` (setgid), for example `install -d -o deployhook -g caddy -m 2750 /var/lib/static-deploy/games`. Published child directories inherit the Caddy group; package files are mode `0640` and directories `2750`. Preserve the existing ownership model, group access, setgid directory policy, and restrictive umask when provisioning the tree. The current systemd unit restricts writes to `/var/lib/static-deploy`; verify the deployed unit still has this allowance.
 
 Do not place games inside `releases/` or `current`. Site deployment and rollback must leave `games/` and its URLs unchanged.
 
