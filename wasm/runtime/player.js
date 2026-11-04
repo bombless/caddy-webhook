@@ -65,17 +65,24 @@ export class WasmGamePlayer {
     this.canvas.width=this.width; this.canvas.height=this.height;
     assertActive(); this.worker=new Worker(new URL("./worker.js",import.meta.url),{type:"module",name:"bombless-wasm-game"});
     await new Promise((resolve,reject)=>{
-      const timer=setTimeout(()=>{this.worker?.terminate();this.worker=null;reject(Error("WASM initialization timeout"));},this.options.watchdogMs);
-      this.worker.onmessage=({data})=>{
-        if(data?.type==="READY"){clearTimeout(timer);resolve();}
-        else if(data.type==="ERROR"){clearTimeout(timer);this.worker.terminate();this.worker=null;reject(Error(data.message));}
+      const worker=this.worker; let settled=false;
+      const finish=(error)=>{if(settled)return;settled=true;clearTimeout(timer);controller.signal.removeEventListener("abort",onAbort);
+        if(error){worker.onmessage=null;worker.onerror=null;worker.onmessageerror=null;worker.terminate();if(this.worker===worker)this.worker=null;reject(error);}
+        else resolve();
       };
-      this.worker.onerror=()=>{clearTimeout(timer);this.worker?.terminate();this.worker=null;reject(Error("WASM worker failed"));};
-      this.worker.onmessageerror=()=>{clearTimeout(timer);this.worker?.terminate();this.worker=null;reject(Error("WASM worker message could not be decoded"));};
-      this.worker.postMessage({type:"INIT",bytes:bytes.buffer,config:{...config,runtime:manifest.runtime},limits:{
+      const onAbort=()=>finish(new DOMException("Load aborted","AbortError"));
+      const timer=setTimeout(()=>finish(Error("WASM initialization timeout")),this.options.watchdogMs);
+      controller.signal.addEventListener("abort",onAbort,{once:true});
+      worker.onmessage=({data})=>{
+        if(data?.type==="READY")finish();
+        else if(data?.type==="ERROR")finish(Error(data.message));
+      };
+      worker.onerror=()=>finish(Error("WASM worker failed"));
+      worker.onmessageerror=()=>finish(Error("WASM worker message could not be decoded"));
+      try { worker.postMessage({type:"INIT",bytes:bytes.buffer,config:{...config,runtime:manifest.runtime},limits:{
         maxMemoryPages:Math.min(caps.maxMemoryPages,this.options.maxMemoryPages),
         maxOutputBytes:Math.min(caps.maxOutputBytes,this.options.maxOutputBytes)
-      }},[bytes]);
+      }},[bytes]); } catch(error) { finish(error); }
     });
     this.worker.onmessage=({data})=>this._message(data);
     this.worker.onerror=()=>{
