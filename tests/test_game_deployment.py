@@ -3,6 +3,7 @@ import io
 import json
 import os
 import stat
+import socket
 import tempfile
 import threading
 import unittest
@@ -36,18 +37,19 @@ class GameDeploymentTests(unittest.TestCase):
         self.tempdir.cleanup()
 
     def request(self, method, path, body=None, headers=None):
-        connection = http.client.HTTPConnection('127.0.0.1', self.port, timeout=5)
-        connection.putrequest(method, path)
-        for key, value in (headers or {}).items():
-            connection.putheader(key, value)
-        connection.endheaders()
-        if body:
-            connection.send(body)
-        response = connection.getresponse()
-        payload = response.read()
-        result = (response.status, response.getheader('Content-Type'), json.loads(payload))
-        connection.close()
-        return result
+        request_headers = {'Host': '127.0.0.1', 'Connection': 'close', **(headers or {})}
+        head = [f'{method} {path} HTTP/1.1'] + [f'{key}: {value}' for key, value in request_headers.items()]
+        wire = ('\\r\\n'.join(head) + '\\r\\n\\r\\n').encode('ascii') + (body or b'')
+        with socket.create_connection(('127.0.0.1', self.port), timeout=10) as connection:
+            connection.sendall(wire)
+            response = connection.makefile('rb').read()
+        header, payload = response.split(b'\\r\\n\\r\\n', 1)
+        status_line = header.split(b'\\r\\n', 1)[0].decode('ascii')
+        status = int(status_line.split()[1])
+        content_type = next((line.split(b':', 1)[1].strip().decode('ascii')
+                             for line in header.split(b'\\r\\n')[1:]
+                             if line.lower().startswith(b'content-type:')), None)
+        return status, content_type, json.loads(payload)
 
     def archive(self, manifest, extra=None):
         buffer = io.BytesIO()
