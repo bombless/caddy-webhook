@@ -95,11 +95,11 @@ def _safe_relative_path(value):
 def _validate_manifest(data):
     try:
         manifest = json.loads(data.decode('utf-8'), object_pairs_hook=_strict_object)
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError) as exc:
         raise InvalidArchiveError('manifest is not strict UTF-8 JSON') from exc
     if not isinstance(manifest, dict):
         raise InvalidArchiveError('manifest must be an object')
-    if manifest.get('manifestVersion') != 1:
+    if isinstance(manifest.get('manifestVersion'), bool) or manifest.get('manifestVersion') != 1:
         raise InvalidArchiveError('unsupported manifest version')
     game_id = manifest.get('id')
     if not isinstance(game_id, str) or not ID_PATTERN.fullmatch(game_id):
@@ -120,7 +120,7 @@ def _validate_manifest(data):
         raise InvalidArchiveError('invalid runtime declaration')
     capabilities = runtime.get('capabilities')
     if (not isinstance(capabilities, list) or len(capabilities) > 16 or
-            any(not isinstance(x, str) or not x or len(x) > 64 for x in capabilities) or
+            any(not isinstance(x, str) or x not in {'input.keyboard', 'input.pointer', 'audio', 'storage', 'score'} for x in capabilities) or
             len(set(capabilities)) != len(capabilities)):
         raise InvalidArchiveError('invalid runtime capabilities')
     if plugin_type == 'vue3':
@@ -146,14 +146,14 @@ def _validate_manifest(data):
             value = display.get(dimension)
             if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 1024:
                 raise InvalidArchiveError('invalid WASM display dimensions')
-        if wasm.get('abi') != 'bombless-game-abi' or wasm.get('abiVersion') != 1:
+        if (wasm.get('abi') != 'bombless-game-abi' or isinstance(wasm.get('abiVersion'), bool) or wasm.get('abiVersion') != 1):
             raise InvalidArchiveError('unsupported WASM ABI')
         pages, output = wasm.get('maxMemoryPages'), wasm.get('maxOutputBytes')
         if isinstance(pages, bool) or not isinstance(pages, int) or not 1 <= pages <= 256:
             raise InvalidArchiveError('invalid WASM memory limit')
         if isinstance(output, bool) or not isinstance(output, int) or not 4 <= output <= 4194304:
             raise InvalidArchiveError('invalid WASM output limit')
-        if wasm.get('renderMode') != 'rgba':
+        if display.get('pixelScale', 'fit') not in ('integer', 'fit') or display.get('orientation', 'any') not in ('landscape', 'portrait', 'any'):\n            raise InvalidArchiveError('invalid WASM display options')\n        if wasm.get('renderMode') != 'rgba':
             raise InvalidArchiveError('unsupported WASM render mode')
     return manifest
 
