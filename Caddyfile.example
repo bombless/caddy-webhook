@@ -3,6 +3,12 @@
 handle /_deploy {
     reverse_proxy 127.0.0.1:8765
 }
+
+# Sandboxed opaque-origin iframes load ES modules using CORS. Restrict wildcard
+# CORS to static game packages; do not apply it to the platform or webhook.
+@game_packages path /app/games/*
+header @game_packages Access-Control-Allow-Origin "*"
+
 handle_path /app/* {
     root * /var/lib/static-deploy/current
     file_server
