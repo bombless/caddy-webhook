@@ -52,7 +52,7 @@ The shared schema is [schemas/game-plugin-manifest.schema.json](schemas/game-plu
 - Vue 3 packages declare `pluginType: "vue3"`, `entry: "index.html"`, `runtime.apiVersion: "1"`, a display object, and a capabilities array.
 - WASM packages declare `pluginType: "wasm"`, a package-relative `.wasm` entry, display width/height, capabilities, and the ABI v1 declaration documented in `wasm/schema/manifest.schema.json`.
 
-Capabilities are requests, not grants. The WASM host currently defaults to deny-all and only implements keyboard/pointer grants. See [Vue 3 runtime documentation](docs/vue3-plugin-runtime.md), [Vue 3 design](docs/design/vue3-plugin.md), and [WASM runtime documentation](wasm/README.md).
+Capabilities are requests, not grants. The WASM host defaults to deny-all and only implements keyboard/pointer grants; the library UI requires an explicit user action before granting those input capabilities. Audio and storage remain denied. See [Vue 3 runtime documentation](docs/vue3-plugin-runtime.md), [Vue 3 design](docs/design/vue3-plugin.md), and [WASM runtime documentation](wasm/README.md).
 
 A successful package deployment returns its immutable package URL and canonical registry URL. Registry schema version 1 contains games sorted by ID and each game's versions sorted by SemVer precedence. Each version points to its own manifest URL.
 
