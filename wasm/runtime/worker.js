@@ -126,6 +126,7 @@ onmessage = async ({data}) => {
       if(!Number.isInteger(limits.maxMemoryPages)||limits.maxMemoryPages<1||limits.maxMemoryPages>256||
          !Number.isInteger(limits.maxOutputBytes)||limits.maxOutputBytes<4||limits.maxOutputBytes>4*1024*1024||
          data.bytes.byteLength<8||data.bytes.byteLength>16*1024*1024) throw Error("invalid runtime limits or module size");
+      validateAbiSignatures(data.bytes);
       const module=await WebAssembly.compile(data.bytes);
       if(WebAssembly.Module.imports(module).length) throw Error("WASM imports are not permitted");
       instance=await WebAssembly.instantiate(module,{});
