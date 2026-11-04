@@ -4,6 +4,86 @@ const required = ["game_abi_version","game_init","game_update","game_input","gam
   "game_get_config_buffer_ptr","game_get_config_buffer_capacity","game_get_input_buffer_ptr","game_get_input_buffer_capacity"];
 let instance, memory, ex, limits, config, stopped = false;
 const fail = message => { postMessage({type:"ERROR",message:String(message).slice(0,240)}); stopped=true; };
+
+/* WebAssembly.Module does not expose function types. Parse the standard
+ * type/function/export sections so a same-named export with the wrong ABI
+ * signature is rejected before the first guest call. Imports are rejected
+ * separately below, so function indices map directly to the function section. */
+function validateAbiSignatures(bytes) {
+  const view = new DataView(bytes);
+  let offset = 8;
+  const readU32 = end => {
+    let value = 0, shift = 0;
+    for (let i = 0; i < 5; i++) {
+      if (offset >= end) throw Error("truncated WASM section");
+      const byte = view.getUint8(offset++);
+      value |= (byte & 0x7f) << shift;
+      if (!(byte & 0x80)) return value >>> 0;
+      shift += 7;
+    }
+    throw Error("invalid WASM LEB128 integer");
+  };
+  const readName = end => {
+    const length = readU32(end);
+    if (offset + length > end) throw Error("truncated WASM name");
+    const value = new TextDecoder().decode(new Uint8Array(bytes, offset, length));
+    offset += length;
+    return value;
+  };
+  const types = [], functions = [], exports = new Map();
+  while (offset < bytes.byteLength) {
+    const id = view.getUint8(offset++);
+    const size = readU32(bytes.byteLength);
+    const end = offset + size;
+    if (end > bytes.byteLength) throw Error("truncated WASM section");
+    if (id === 1) {
+      const count = readU32(end);
+      for (let i = 0; i < count; i++) {
+        if (view.getUint8(offset++) !== 0x60) throw Error("unsupported WASM function type");
+        const paramCount = readU32(end), params = [];
+        for (let p = 0; p < paramCount; p++) params.push(view.getUint8(offset++));
+        const resultCount = readU32(end), results = [];
+        for (let r = 0; r < resultCount; r++) results.push(view.getUint8(offset++));
+        if (offset > end || params.some(x => x !== 0x7f) || results.some(x => x !== 0x7f)) throw Error("unsupported WASM ABI value type");
+        types.push({ params: params.length, results: results.length });
+      }
+    } else if (id === 2) {
+      const count = readU32(end);
+      if (count !== 0) throw Error("WASM imports are not permitted");
+    } else if (id === 3) {
+      const count = readU32(end);
+      for (let i = 0; i < count; i++) functions.push(readU32(end));
+    } else if (id === 7) {
+      const count = readU32(end);
+      for (let i = 0; i < count; i++) {
+        const name = readName(end), kind = view.getUint8(offset++), index = readU32(end);
+        exports.set(name, { kind, index });
+      }
+    }
+    if (offset > end) throw Error("malformed WASM section");
+    offset = end;
+  }
+  const expected = {
+    game_abi_version: [0, 1], game_init: [2, 1], game_update: [1, 1],
+    game_input: [2, 1], game_render: [2, 1], game_shutdown: [0, 0],
+    game_get_width: [0, 1], game_get_height: [0, 1],
+    game_get_render_buffer_ptr: [0, 1], game_get_render_buffer_len: [0, 1],
+    game_get_config_buffer_ptr: [0, 1], game_get_config_buffer_capacity: [0, 1],
+    game_get_input_buffer_ptr: [0, 1], game_get_input_buffer_capacity: [0, 1]
+  };
+  for (const [name, signature] of Object.entries(expected)) {
+    const item = exports.get(name);
+    if (!item || item.kind !== 0) throw Error("missing function export: " + name);
+    const typeIndex = functions[item.index];
+    const type = types[typeIndex];
+    if (!type || type.params !== signature[0] || type.results !== signature[1]) {
+      throw Error("invalid ABI signature: " + name);
+    }
+  }
+  const memoryExport = exports.get("memory");
+  if (!memoryExport || memoryExport.kind !== 2) throw Error("missing exported memory");
+}
+
 function checkMemory() {
   if(!(memory instanceof WebAssembly.Memory) || memory.buffer.byteLength > limits.maxMemoryPages*65536) throw Error("WASM memory limit exceeded");
 }
