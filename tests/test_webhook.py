@@ -1,12 +1,13 @@
+import http.client
 import json
 import os
 import stat
 import tempfile
+import threading
 import unittest
 import sys
 import io
 import zipfile
-from email.message import Message
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,56 +23,27 @@ class WebhookHTTPTests(unittest.TestCase):
         webhook.TOKEN = 'unit-test-token'
         os.makedirs(os.path.join(webhook.ROOT, 'tmp'))
         os.makedirs(os.path.join(webhook.ROOT, 'releases'))
+        self.server = webhook.Server(('127.0.0.1', 0), webhook.Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.port = self.server.server_address[1]
+
     def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)
         webhook.ROOT = self.old_root
         webhook.TOKEN = self.old_token
         self.tempdir.cleanup()
 
     def request(self, method, path, body=None, headers=None):
-        class Harness(webhook.Handler):
-            def __init__(self, request_path, request_body, request_headers):
-                self.path = request_path
-                self.headers = Message()
-                self.headers['Authorization'] = request_headers.get('Authorization', '')
-                self.headers['Content-Type'] = request_headers.get('Content-Type', '')
-                self.headers['Content-Length'] = request_headers.get(
-                    'Content-Length', str(len(request_body))
-                )
-                self.rfile = io.BytesIO(request_body)
-                self.wfile = io.BytesIO()
-                self.client_address = ('127.0.0.1', 0)
-                self.response_status = None
-                self.response_headers = {}
-
-            def send_response(self, status, message=None):
-                self.response_status = status
-
-            def send_header(self, key, value):
-                self.response_headers[key] = value
-
-            def end_headers(self):
-                pass
-
-            def log_error(self, fmt, *args):
-                pass
-
-            def log_message(self, fmt, *args):
-                pass
-
-        request_body = body or b''
-        handler = Harness(path, request_body, headers or {})
-        if method == 'GET':
-            handler.do_GET()
-        elif method == 'POST':
-            handler.do_POST()
-        else:
-            raise AssertionError('unsupported test HTTP method')
-        payload = handler.wfile.getvalue()
-        return (
-            handler.response_status,
-            handler.response_headers.get('Content-Type'),
-            json.loads(payload),
-        )
+        connection = http.client.HTTPConnection('127.0.0.1', self.port, timeout=3)
+        connection.request(method, path, body=body, headers=headers or {})
+        response = connection.getresponse()
+        payload = response.read()
+        result = (response.status, response.getheader('Content-Type'), json.loads(payload))
+        connection.close()
+        return result
 
     def auth_headers(self, **extra):
         return {
