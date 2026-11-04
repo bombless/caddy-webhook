@@ -247,3 +247,11 @@ CI validation (2026-11-04): initial runs [41841293121](https://github.com/bomble
 - Hardened the Player against synchronous `Worker.postMessage()` failures on both INPUT and TICK paths. Input queue accounting is rolled back, pending watchdog state is cleared, and the affected Worker is terminated through the existing recoverable-error cleanup path.
 - Added regression tests for detached/unavailable Worker delivery on both paths, including worker termination, cleared queue/busy/watchdog state, and surfaced errors.
 - GitHub Actions validation is triggered by the runtime/test changes; browser Canvas/focus integration and a checked-in sample-game replay remain outstanding.
+
+
+## Implementation progress (2026-11-05, pause clock consistency)
+
+- Fixed a deterministic-timing edge case in `WasmGamePlayer.pause()`: the host previously added the unconsumed accumulator remainder to `simulationMicros` even though those fractional updates were discarded and never sent to the Worker. Repeated pause/resume cycles could therefore move host input timestamps ahead of the guest simulation clock.
+- Pause now discards the incomplete fixed step without advancing simulation time; held-key release events use the timestamp of the last completed fixed update.
+- Added a regression test asserting the simulation clock and KEY_UP timestamp remain unchanged when pausing with a fractional accumulator remainder.
+- GitHub Actions/local test execution has not yet been verified for this commit; browser integration remains outstanding.
