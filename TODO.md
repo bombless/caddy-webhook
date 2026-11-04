@@ -36,7 +36,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - [x] Bound every message, input queue, event queue, render payload, and host capability request.
 - [x] Validate pointers, lengths, dimensions, multiplication/addition overflow, enum values, numeric finiteness, and guest return values at every boundary.
 - [x] Define tick-scoped watchdog semantics; worker termination is implemented. (Automated timeout/termination coverage remains in the test section.)
-- [ ] Finish auditing and testing cleanup/error paths for worker errors, traps, malformed messages, fetch failures, aborts, and disposal; verify no workers, listeners, object URLs, or animation callbacks leak.
+- [ ] Finish auditing and testing cleanup/error paths for worker errors, traps, malformed messages, fetch failures, aborts, and disposal; verify no workers, listeners, object URLs, or animation callbacks leak. (Fetch cancellation and disposal are now covered; continue auditing remaining failure paths.)
 - [x] Ensure pause, blur, visibility changes, and disposal clear held input and stop simulation.
 - [x] Add a user-visible recoverable error state; do not silently leave a blank or frozen player.
 - [x] Document the security boundary accurately: worker isolation and capability restriction are fault containment, not a guarantee that arbitrary WASM is harmless.
@@ -49,7 +49,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - [x] Add tests for module/package size limits, memory limits, and output bounds (streaming reader and manifest/runtime bounds; worker memory/output fixtures already cover the guest boundary).
 - [x] Add tests for worker message validation and malformed payloads.
 - [x] Add tests for watchdog timeout and worker termination.
-- [ ] Add tests for resume/dispose lifecycle and end-to-end held-key cleanup.
+- [ ] Add tests for resume/dispose lifecycle and end-to-end held-key cleanup. (Dispose and pause/key-up paths are covered; explicit resume and browser-level held-key integration remain.)
 - [ ] Add browser tests that instantiate a real module and verify Canvas output.
 - [ ] Add a deterministic headless harness that supplies exact input events and fixed update ticks, then asserts known state/render results.
 - [ ] Run the tests in CI and document supported browsers and required test tooling.
@@ -129,6 +129,14 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - Added `wasm/test/player.test.js` for manifest validation, safe/unsafe package entry paths, and streamed package/module size-limit behavior. Exported the small `safePath` and `readLimited` helpers for direct tests; the player’s existing `_validateManifest()` is exercised without constructing DOM state.
 - CI run [41843753939](https://github.com/bombless/caddy-webhook/actions/runs/41843753939) passed on commit `b3518eb76102dbb720c782aee6e0b5a953ca4ab6` (syntax checks and all worker + player tests).
 - GitHub Actions passes on the current branch (7 test groups, including the real fixture corpus). Remaining P0 gaps include exact WASM export-signature conformance, watchdog/lifecycle tests, browser Canvas tests, and the deterministic headless harness. Manifest/path and streaming-size helper tests are now covered; full JSON Schema conformance and end-to-end fetch integration are not yet proven.
+
+## Implementation progress (2026-11-04, continued)
+
+- Made package loading cancellable with an `AbortController`: manifest and WASM fetches receive the abort signal, and disposed/aborted loads cannot continue into Worker creation or surface stale UI errors.
+- Made Worker initialization cancellable and idempotently cleaned up its handlers/timer on timeout, initialization error, worker error, message decode error, or disposal.
+- Disposal now aborts an in-flight load, clears watchdog state, detaches input, requests bounded graceful Worker shutdown, and terminates the Worker after ACK or a 100 ms fallback.
+- Added regression tests for aborting a pending package fetch and for graceful/idempotent disposal.
+- CI run [41844848083](https://github.com/bombless/caddy-webhook/actions/runs/41844848083) passed (JavaScript syntax checks and all worker/player tests).
 
 ## Implementation progress (2026-11-04, continued)
 
