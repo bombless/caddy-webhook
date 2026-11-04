@@ -1,5 +1,5 @@
 import { envelope, isEnvelope, PROTOCOL_VERSION } from '../runtime/protocol'
-import { provideGameRuntime, type GameRuntime } from './vue'
+import type { GameRuntime } from './vue'
 
 type Listener = (value: any) => void
 export function createGameBridge() {
@@ -27,8 +27,7 @@ export function createGameBridge() {
   const receive = (event: MessageEvent) => {
     if (event.source !== window.parent || !isEnvelope(event.data)) return
     const m = event.data
-    if (instanceId && m.instanceId !== instanceId) return
-    if (m.type === 'HOST_INIT') {
+    if (m.type === 'HOST_INIT' && !instanceId) {
       instanceId = m.instanceId
       hostOrigin = event.origin === 'null' ? '*' : event.origin
       if (m.payload.apiVersion !== String(PROTOCOL_VERSION)) return
@@ -37,7 +36,7 @@ export function createGameBridge() {
       emit('GAME_READY', {})
       return
     }
-    if (!instanceId) return
+    if (!instanceId || m.instanceId !== instanceId) return
     if (m.type === 'HOST_RESPONSE' && m.requestId) {
       const p = pending.get(m.requestId)
       if (p) { clearTimeout(p.timer); pending.delete(m.requestId); m.payload.ok ? p.resolve(m.payload.value) : p.reject(new Error(String(m.payload.error ?? 'Host request failed'))) }
@@ -72,7 +71,6 @@ export function createGameBridge() {
   }
   return {
     runtime,
-    install() { provideGameRuntime(runtime) },
     dispose() {
       window.removeEventListener('message', receive)
       for (const p of pending.values()) { clearTimeout(p.timer); p.reject(new Error('Bridge disposed')) }
