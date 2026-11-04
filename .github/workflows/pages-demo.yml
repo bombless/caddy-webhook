@@ -30,7 +30,7 @@ jobs:
           cp demo/index.html demo/app.js demo/styles.css _site/
           cp wasm/runtime/player.js wasm/runtime/worker.js _site/wasm/runtime/
           cp demo/games/snake/manifest.json _site/games/snake/
-          clang --target=wasm32 -O2 -nostdlib \
+          clang --target=wasm32 -O2 -fno-builtin -nostdlib \
             -Wl,--no-entry -Wl,--export-memory \
             -Wl,--initial-memory=262144 -Wl,--max-memory=1048576 \
             -Wl,-z,stack-size=32768 -Wl,--strip-all \
