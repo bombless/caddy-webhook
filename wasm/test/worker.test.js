@@ -100,7 +100,7 @@ function harness(overrides = {}) {
     instantiate: async () => ({ exports })
   };
   const scope = {
-    WebAssembly: wasm, Uint8Array, ArrayBuffer, TextEncoder, JSON, Number, Math, Set, Error,
+    WebAssembly: wasm, Uint8Array, ArrayBuffer, TextEncoder, TextDecoder, JSON, Number, Math, Set, Error,
     postMessage: message => messages.push(message),
     close() {}
   };
