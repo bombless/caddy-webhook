@@ -36,7 +36,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - [x] Bound every message, input queue, event queue, render payload, and host capability request.
 - [x] Validate pointers, lengths, dimensions, multiplication/addition overflow, enum values, numeric finiteness, and guest return values at every boundary.
 - [x] Define tick-scoped watchdog semantics; worker termination is implemented. (Automated timeout/termination coverage remains in the test section.)
-- [ ] Finish auditing and testing cleanup/error paths for worker errors, traps, malformed messages, fetch failures, aborts, and disposal; verify no workers, listeners, object URLs, or animation callbacks leak. (Fetch cancellation and disposal are now covered; continue auditing remaining failure paths.)
+- [ ] Finish auditing and testing cleanup/error paths for worker errors, traps, malformed messages, fetch failures, aborts, and disposal; verify no workers, listeners, object URLs, or animation callbacks leak. (Fetch cancellation, disposal, and synchronous Worker postMessage failures are covered; continue auditing remaining failure paths.)
 - [x] Ensure pause, blur, visibility changes, and disposal clear held input and stop simulation.
 - [x] Add a user-visible recoverable error state; do not silently leave a blank or frozen player.
 - [x] Document the security boundary accurately: worker isolation and capability restriction are fault containment, not a guarantee that arbitrary WASM is harmless.
@@ -240,3 +240,10 @@ CI validation (2026-11-04): initial runs [41841293121](https://github.com/bomble
 - Only the implemented `input.keyboard` and `input.pointer` capabilities may currently be granted; unsupported audio/storage/score services remain disabled, and invalid host grant names are rejected.
 - Added regression coverage for deny-by-default, selective grants, and non-mutation of the parsed manifest. Updated the host integration documentation with the explicit grant policy.
 - Automated validation is pending the GitHub Actions run triggered by these commits.
+
+
+## Implementation progress (2026-11-05, Worker message delivery failures)
+
+- Hardened the Player against synchronous `Worker.postMessage()` failures on both INPUT and TICK paths. Input queue accounting is rolled back, pending watchdog state is cleared, and the affected Worker is terminated through the existing recoverable-error cleanup path.
+- Added regression tests for detached/unavailable Worker delivery on both paths, including worker termination, cleared queue/busy/watchdog state, and surfaced errors.
+- GitHub Actions validation is triggered by the runtime/test changes; browser Canvas/focus integration and a checked-in sample-game replay remain outstanding.
