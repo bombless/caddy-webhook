@@ -1,0 +1,68 @@
+name: Deploy platform site to webhook
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: whole-site-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build and test platform
+        run: |
+          npm install
+          npm test
+          npm run build
+      - name: Validate whole-site deployment configuration
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_TOKEN:-}" || { echo "::error::DEPLOY_TOKEN secret is required"; exit 1; }
+          test -n "${DEPLOY_WEBHOOK_URL:-}" || { echo "::error::DEPLOY_WEBHOOK_URL secret is required"; exit 1; }
+          echo "::add-mask::${DEPLOY_TOKEN}"
+          node --input-type=module <<'NODE'
+          const url = new URL(process.env.DEPLOY_WEBHOOK_URL);
+          if (url.protocol !== 'https:' || !url.pathname.endsWith('/_deploy') ||
+              url.pathname.endsWith('/_deploy/game') || url.username || url.password) {
+            throw new Error('DEPLOY_WEBHOOK_URL must be HTTPS and end with /_deploy (not /_deploy/game)');
+          }
+          NODE
+      - name: Package and deploy complete site release
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${DEPLOY_TOKEN}"
+          test -f dist/index.html || { echo "::error::dist/index.html is required"; exit 1; }
+          (cd dist && zip -qr ../site.zip .)
+          body="$(mktemp)"
+          trap 'rm -f "$body"' EXIT
+          status="$(curl --silent --show-error --retry 0 --connect-timeout 15 --max-time 180 \
+            --output "$body" --write-out '%{http_code}' \
+            -X POST -H "Authorization: Bearer ${DEPLOY_TOKEN}" \
+            -H 'Content-Type: application/zip' --data-binary @site.zip \
+            "$DEPLOY_WEBHOOK_URL")"
+          cat "$body"
+          case "$status" in
+            2*) echo "Whole-site release deployed." ;;
+            400) echo "::error::Webhook rejected the site archive."; exit 1 ;;
+            401) echo "::error::Webhook rejected DEPLOY_TOKEN."; exit 1 ;;
+            413) echo "::error::Site archive exceeds the webhook upload limit."; exit 1 ;;
+            *) echo "::error::Whole-site deployment failed with HTTP $status."; exit 1 ;;
+          esac
