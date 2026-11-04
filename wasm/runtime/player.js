@@ -26,13 +26,24 @@ async function readLimited(response, limit, label) {
 export class WasmGamePlayer {
   constructor(canvas, options={}) {
     if(!(canvas instanceof HTMLCanvasElement)) throw new TypeError("canvas required");
-    this.canvas=canvas; this.options={...DEFAULTS,...options}; this.inputWindowStart=0; this.inputCount=0; this.lastPointerMove=0; this.pendingInputs=0; this._watchdogTimer=null; this.startedAt=0; this.held=new Set(); this.running=false; this.disposed=false; this.last=0; this.acc=0; this.step=1/60; this.worker=null;
+    this.canvas=canvas; this.options={...DEFAULTS,...options}; this.inputWindowStart=0; this.inputCount=0; this.lastPointerMove=0; this.pendingInputs=0; this._watchdogTimer=null; this.startedAt=0; this.held=new Set(); this.running=false; this.disposed=false; this.last=0; this.acc=0; this.step=1/60; this.worker=null; this.loading=false; this._inputAttached=false; this._lastLoad=null; this._busy=false;
     this.ctx=canvas.getContext("2d",{alpha:false}); if(!this.ctx) throw Error("2D canvas unavailable");
     this._key=e=>this._keyEvent(e); this._pointer=e=>this._pointerEvent(e);
     this._blur=()=>this.pause(); this._visibility=()=>{if(document.hidden)this.pause();};
+    this.errorElement=document.createElement("div");
+    this.errorElement.setAttribute("role","alert"); this.errorElement.setAttribute("aria-live","assertive");
+    this.errorElement.hidden=true;
+    this.errorMessage=document.createElement("span");
+    this.retryButton=document.createElement("button"); this.retryButton.type="button"; this.retryButton.textContent="Retry";
+    this.retryButton.addEventListener("click",()=>{if(this._lastLoad&&!this.disposed)this.load(this._lastLoad.packageUrl,this._lastLoad.config).catch(()=>{});});
+    this.errorElement.append(this.errorMessage,this.retryButton);
+    canvas.parentNode?.insertBefore(this.errorElement,canvas.nextSibling);
   }
   async load(packageUrl, config={}) {
     if(this.disposed) throw Error("player disposed");
+    if(this.loading||this.worker) throw Error("player is already loading or running; dispose it before loading another package");
+    this.loading=true; this._lastLoad={packageUrl,config};
+    try {
     const base=new URL(".",packageUrl), manifestUrl=new URL("manifest.json",base);
     const mr=await fetch(manifestUrl,{credentials:"omit",redirect:"error"});
     if(!mr.ok) throw Error("manifest fetch failed: "+mr.status);
@@ -58,6 +69,7 @@ export class WasmGamePlayer {
         else if(data.type==="ERROR"){clearTimeout(timer);this.worker.terminate();this.worker=null;reject(Error(data.message));}
       };
       this.worker.onerror=()=>{clearTimeout(timer);this.worker?.terminate();this.worker=null;reject(Error("WASM worker failed"));};
+      this.worker.onmessageerror=()=>{clearTimeout(timer);this.worker?.terminate();this.worker=null;reject(Error("WASM worker message could not be decoded"));};
       this.worker.postMessage({type:"INIT",bytes:bytes.buffer,config:{...config,runtime:manifest.runtime},limits:{
         maxMemoryPages:Math.min(caps.maxMemoryPages,this.options.maxMemoryPages),
         maxOutputBytes:Math.min(caps.maxOutputBytes,this.options.maxOutputBytes)
@@ -67,14 +79,30 @@ export class WasmGamePlayer {
     this.worker.onerror=()=>{
       clearTimeout(this._watchdogTimer); this._watchdogTimer=null;
       this.pause(); this.worker?.terminate(); this.worker=null; this.pendingInputs=0; this._busy=false;
-      this.options.onError?.(Error("WASM worker failed"));
+      this._reportError(Error("WASM worker failed"));
     };
     this.worker.onmessageerror=()=>{
       this.pause(); this.worker?.terminate(); this.worker=null; this.pendingInputs=0; this._busy=false;
-      this.options.onError?.(Error("WASM worker message could not be decoded"));
+      this._reportError(Error("WASM worker message could not be decoded"));
     };
     this.startedAt=performance.now();
-    this._attachInput(); this.resume(); return manifest;
+    this._attachInput(); this.errorElement.hidden=true; this.resume(); return manifest;
+    } catch(error) {
+      this._cleanupFailedLoad(); this._reportError(error); throw error;
+    } finally { this.loading=false; }
+  }
+  _reportError(error) {
+    const message=error instanceof Error?error.message:String(error);
+    this.errorMessage.textContent="Game unavailable: "+message;
+    this.retryButton.hidden=!this._lastLoad||this.disposed;
+    this.errorElement.hidden=false;
+    this.options.onError?.(error instanceof Error?error:new Error(message));
+  }
+  _cleanupFailedLoad() {
+    clearTimeout(this._watchdogTimer); this._watchdogTimer=null;
+    if(this.running){this.running=false;cancelAnimationFrame(this._raf);}
+    this.held.clear(); this.pendingInputs=0; this._busy=false;
+    this._detachInput(); this.worker?.terminate(); this.worker=null;
   }
   _validateManifest(m) {
     if(!m||typeof m!=="object"||Array.isArray(m)||m.manifestVersion!==1||m.pluginType!=="wasm"||!m.runtime||m.runtime.apiVersion!=="1") throw Error("invalid plugin manifest");
@@ -98,7 +126,7 @@ export class WasmGamePlayer {
     if(data.type==="ERROR"){
       clearTimeout(this._watchdogTimer); this._watchdogTimer=null; this._busy=false;
       this.pause();this.worker?.terminate();this.worker=null;this.pendingInputs=0;
-      this.options.onError?.(new Error(data.message));return;
+      this._reportError(new Error(data.message));return;
     }
     if(data.type==="FRAME" && data.width===this.width && data.height===this.height && data.frame instanceof ArrayBuffer && data.frame.byteLength===this.width*this.height*4) {
       clearTimeout(this._watchdogTimer); this._watchdogTimer=null; this._busy=false;
@@ -106,10 +134,17 @@ export class WasmGamePlayer {
     }
   }
   _attachInput() {
+    if(this._inputAttached)return; this._inputAttached=true;
     window.addEventListener("keydown",this._key); window.addEventListener("keyup",this._key);
     this.canvas.addEventListener("pointerdown",this._pointer); this.canvas.addEventListener("pointerup",this._pointer);
     this.canvas.addEventListener("pointermove",this._pointer); this.canvas.addEventListener("pointercancel",this._pointer);
     window.addEventListener("blur",this._blur); document.addEventListener("visibilitychange",this._visibility);
+  }
+  _detachInput() {
+    if(!this._inputAttached)return; this._inputAttached=false;
+    window.removeEventListener("keydown",this._key);window.removeEventListener("keyup",this._key);
+    this.canvas.removeEventListener("pointerdown",this._pointer);this.canvas.removeEventListener("pointerup",this._pointer);this.canvas.removeEventListener("pointermove",this._pointer);this.canvas.removeEventListener("pointercancel",this._pointer);
+    window.removeEventListener("blur",this._blur);document.removeEventListener("visibilitychange",this._visibility);
   }
   _keyEvent(e) {
     if(!this.manifest.runtime.capabilities.includes("input.keyboard")||!KEY_CODES.has(e.code)) return;
@@ -133,7 +168,7 @@ export class WasmGamePlayer {
   }
   _clearInput() { for(const code of this.held)this._send({type:"KEY_UP",code,modifiers:0,timestamp_micros:this._timestampMicros()});this.held.clear(); }
   resume() { if(this.disposed||!this.worker||this.running)return;this.running=true;this.last=performance.now();this.acc=0;this._raf=requestAnimationFrame(t=>this._tick(t)); }
-  pause() { if(!this.running)return;this.running=false;cancelAnimationFrame(this._raf);this._clearInput(); }
+  pause() { if(this.running){this.running=false;cancelAnimationFrame(this._raf);} this._clearInput(); }
   _tick(now) {
     if(!this.running)return;
     const elapsed=Math.min((now-this.last)/1000,0.1);this.last=now;this.acc=Math.min(this.acc+elapsed,0.1);
@@ -146,15 +181,13 @@ export class WasmGamePlayer {
     this._watchdogTimer=setTimeout(()=>{
       this._watchdogTimer=null; this.pause(); this.worker?.terminate(); this.worker=null;
       this.pendingInputs=0; this._busy=false;
-      this.options.onError?.(Error("WASM watchdog timeout"));
+      this._reportError(Error("WASM watchdog timeout"));
     },this.options.watchdogMs);
     this.worker.postMessage(message);
   }
   async dispose() {
     if(this.disposed)return;this.pause();this.disposed=true;this._clearInput();
-    window.removeEventListener("keydown",this._key);window.removeEventListener("keyup",this._key);
-    this.canvas.removeEventListener("pointerdown",this._pointer);this.canvas.removeEventListener("pointerup",this._pointer);this.canvas.removeEventListener("pointermove",this._pointer);this.canvas.removeEventListener("pointercancel",this._pointer);
-    window.removeEventListener("blur",this._blur);document.removeEventListener("visibilitychange",this._visibility);
+    this._detachInput(); this.errorElement.remove();
     if(this.worker){
       const worker=this.worker; this.worker=null; clearTimeout(this._watchdogTimer); this._watchdogTimer=null;
       await new Promise(resolve=>{
