@@ -14,7 +14,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 
 ## P0 — Make ABI v1 precise and internally consistent
 
-- [ ] Review the current header and runtime against the design proposal; resolve signature and ownership mismatches before treating ABI v1 as stable.
+- [x] Review the current header and runtime against the design proposal; resolve signature and ownership mismatches before treating ABI v1 as stable.
 - [x] Specify every export's exact WASM signature, required/optional status, lifecycle state, and return-code behavior.
 - [x] Specify the framebuffer contract: width, height, RGBA byte order, top-left origin, row stride, straight/premultiplied alpha, and buffer ownership.
 - [x] Specify how the guest exposes framebuffer pointer, capacity, and dimensions; validate all values and integer arithmetic before creating memory views.
