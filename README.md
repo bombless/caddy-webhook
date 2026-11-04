@@ -24,7 +24,7 @@ All POST requests require `Authorization: Bearer $DEPLOY_TOKEN` and `Content-Typ
 
 Uploads are limited to 100 MiB, 10,000 ZIP entries, and 500 MiB expanded content. ZIP paths are checked for traversal, duplicate/conflicting paths, special files and symlinks. Game manifests are parsed as strict UTF-8 JSON; duplicate JSON keys, unsupported manifest versions, invalid IDs, non-semver versions, unsafe entry paths, unsupported plugin types, and missing entries are rejected.
 
-The game ID format is `[a-z0-9][a-z0-9-]{0,63}`. Versions use semantic version syntax. A published `id/version` is immutable: repeating it returns HTTP 409. A newer semantic version is added alongside previous versions and becomes latest according to SemVer precedence (build metadata does not affect ordering).
+The game ID format is `[a-z0-9][a-z0-9-]{0,63}`. Versions use semantic version syntax. A published `id/version` is immutable: repeating it returns HTTP 409. A newer semantic version is added alongside previous versions and becomes latest according to SemVer precedence. Build metadata does not affect SemVer precedence; versions tied on precedence use a lexical full-version tie-breaker for deterministic ordering.
 
 ## Persistent storage layout
 
