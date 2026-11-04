@@ -64,7 +64,8 @@ The Caddy example is repository guidance only. It does not update a running Cadd
 
 ## GitHub Actions
 
-- The existing site workflow continues to build the platform shell and publish the whole-site artifact to GitHub Pages.
+- `.github/workflows/deploy.yml` builds/tests and publishes the platform shell to GitHub Pages only from `main`.
+- `.github/workflows/deploy-site.yml` is the whole-site webhook publisher targeting `POST /_deploy` with `DEPLOY_WEBHOOK_URL` and `DEPLOY_TOKEN` secrets.
 - `.github/workflows/publish-game.yml` is a manual package-publication workflow. It builds the Vue example package (or accepts a package directory), creates a ZIP with `manifest.json` at its root, and posts it to `/_deploy/game`.
 - The reusable whole-site deployment workflow remains available at `.github/workflows/deploy-static.yml`; its caller must continue to target `/_deploy`.
 
