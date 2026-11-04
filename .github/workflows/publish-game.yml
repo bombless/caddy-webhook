@@ -8,6 +8,11 @@ on:
         required: false
         default: "dist/games/hello-vue3"
         type: string
+      build_example:
+        description: "Build the checked-in Vue example before packaging (disable for a prebuilt custom/WASM package)"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -26,6 +31,7 @@ jobs:
           node-version: 22
           cache: npm
       - name: Build platform and example package
+        if: ${{ inputs.build_example }}
         run: |
           npm install
           npm run build
