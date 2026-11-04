@@ -216,3 +216,31 @@ test("maps pointer coordinates for a vertically letterboxed logical canvas", () 
   assert.deepEqual(instance._logicalPoint(400, 180), { x: 160, y: 90 });
   assert.deepEqual(instance._logicalPoint(720, 180), { x: 320, y: 90 });
 });
+
+
+test("resume restarts the fixed-step loop after pause and resets accumulated time", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  let scheduled;
+  const original = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = callback => { scheduled = callback; return 17; };
+  try {
+    Object.assign(instance, {
+      disposed: false, worker: {}, running: false, last: 0, acc: 0.08, _raf: 0
+    });
+    instance.resume();
+    assert.equal(instance.running, true);
+    assert.ok(instance.last > 0);
+    assert.equal(instance.acc, 0);
+    assert.equal(instance._raf, 17);
+    assert.equal(typeof scheduled, "function");
+    instance.resume();
+    assert.equal(instance._raf, 17);
+    instance.disposed = true;
+    instance.running = false;
+    instance.resume();
+    assert.equal(instance.running, false);
+  } finally {
+    if (original === undefined) delete globalThis.requestAnimationFrame;
+    else globalThis.requestAnimationFrame = original;
+  }
+});
