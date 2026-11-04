@@ -1,0 +1,20 @@
+{
+  "manifestVersion": 1,
+  "id": "snake-arcade",
+  "name": "Snake Arcade",
+  "version": "1.0.0",
+  "pluginType": "wasm",
+  "entry": "game.wasm",
+  "runtime": {
+    "apiVersion": "1",
+    "display": { "width": 160, "height": 120, "pixelScale": "fit", "orientation": "landscape" },
+    "capabilities": ["input.keyboard"],
+    "wasm": {
+      "abi": "bombless-game-abi",
+      "abiVersion": 1,
+      "maxMemoryPages": 16,
+      "maxOutputBytes": 307200,
+      "renderMode": "rgba"
+    }
+  }
+}

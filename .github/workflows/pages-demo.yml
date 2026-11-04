@@ -1,0 +1,51 @@
+name: WASM demo · GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install WASM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld
+      - name: Build static demo
+        run: |
+          mkdir -p _site/wasm/runtime _site/games/snake
+          cp demo/index.html demo/app.js demo/styles.css _site/
+          cp wasm/runtime/player.js wasm/runtime/worker.js _site/wasm/runtime/
+          cp demo/games/snake/manifest.json _site/games/snake/
+          clang --target=wasm32 -O2 -fno-builtin -nostdlib \
+            -Wl,--no-entry -Wl,--export-memory \
+            -Wl,--initial-memory=262144 -Wl,--max-memory=1048576 \
+            -Wl,-z,stack-size=32768 -Wl,--strip-all \
+            -o _site/games/snake/game.wasm demo/game.c
+          test -s _site/games/snake/game.wasm
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
