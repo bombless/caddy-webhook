@@ -19,6 +19,7 @@ modules. Create a canvas and instantiate:
 ```js
 import { WasmGamePlayer } from "./wasm/runtime/player.js";
 const player = new WasmGamePlayer(document.querySelector("canvas"), {
+  grantedCapabilities: ["input.keyboard", "input.pointer"],
   onError: error => showRecoverableError(error)
 });
 await player.load(new URL("./games/pixel-snake/", location.href));
@@ -37,8 +38,11 @@ is capped independently (30 FPS by default; configure `renderHz` from 10 to 60).
 The player batches up to six fixed updates into each rendered frame to catch up
 after scheduling delays. Elapsed time is clamped after suspension. The runtime requires a dedicated Worker, Canvas
 2D, and module-capable browser.
-It does not provide audio, persistence, score, or asset capabilities yet;
-manifest capability declarations are requests and do not grant those services.
+Manifest capabilities are requests, not grants. The host must explicitly pass
+implemented capabilities through `grantedCapabilities`; the default is deny-all.
+Only `input.keyboard` and `input.pointer` are currently grantable. Audio,
+persistence, score, and asset capabilities remain disabled even when declared
+in a manifest. Unknown or not-yet-implemented host grants are rejected.
 
 ## ABI v1 implementation contract
 
