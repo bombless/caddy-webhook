@@ -3,6 +3,8 @@ const required = ["game_abi_version","game_init","game_update","game_input","gam
   "game_get_width","game_get_height","game_get_render_buffer_ptr","game_get_render_buffer_len",
   "game_get_config_buffer_ptr","game_get_config_buffer_capacity","game_get_input_buffer_ptr","game_get_input_buffer_capacity"];
 let instance, memory, ex, limits, config, stopped = false;
+let inputQueue = [], simulationTimeMicros = 0, lastInputTimestampMicros = -1;
+const MAX_PENDING_INPUTS = 256;
 const fail = message => { postMessage({type:"ERROR",message:String(message).slice(0,240)}); stopped=true; };
 
 /* WebAssembly.Module does not expose function types. Parse the standard
@@ -115,6 +117,14 @@ function validateEvent(e) {
        !integer(e.code,-1,31)||!integer(e.buttons,0,31)) throw Error("invalid pointer event");
   } else throw Error("unknown input event type");
 }
+function deliverInput(event) {
+  const bytes=new TextEncoder().encode(JSON.stringify(event));
+  const p=u32(ex.game_get_input_buffer_ptr()),cap=u32(ex.game_get_input_buffer_capacity());
+  if(cap>4096 || bytes.length>cap) throw Error("input event exceeds guest buffer/limit");
+  range(p,cap);
+  new Uint8Array(memory.buffer,range(p,bytes.length),bytes.length).set(bytes);
+  status(ex.game_input(p,bytes.length),"game_input");
+}
 onmessage = async ({data}) => {
   try {
     if(!data || typeof data!=="object" || typeof data.type!=="string") throw Error("malformed worker message");
@@ -142,6 +152,7 @@ onmessage = async ({data}) => {
       range(cp,cc);
       new Uint8Array(memory.buffer,range(cp,bytes.length),bytes.length).set(bytes);
       status(ex.game_init(cp,bytes.length),"game_init");
+      inputQueue=[]; simulationTimeMicros=0; lastInputTimestampMicros=-1;
       const d=dimensions();
       if(d.width!==config.runtime.display.width||d.height!==config.runtime.display.height) throw Error("manifest/framebuffer dimensions differ");
       const rp=u32(ex.game_get_render_buffer_ptr()),rl=u32(ex.game_get_render_buffer_len());
@@ -152,17 +163,21 @@ onmessage = async ({data}) => {
       exactKeys(data,["type","event"],"INPUT");
       if(!instance || !ex || !data.event || typeof data.event!=="object" || Array.isArray(data.event)) throw Error("malformed input event");
       validateEvent(data.event);
-      const bytes=new TextEncoder().encode(JSON.stringify(data.event));
-      const p=u32(ex.game_get_input_buffer_ptr()),cap=u32(ex.game_get_input_buffer_capacity());
-      if(cap>4096 || bytes.length>cap) throw Error("input event exceeds guest buffer/limit");
-      range(p,cap);
-      new Uint8Array(memory.buffer,range(p,bytes.length),bytes.length).set(bytes);
-      status(ex.game_input(p,bytes.length),"game_input");
+      if(inputQueue.length>=MAX_PENDING_INPUTS) throw Error("input event queue limit exceeded");
+      if(data.event.timestamp_micros<lastInputTimestampMicros) throw Error("input timestamps must be monotonic");
+      lastInputTimestampMicros=data.event.timestamp_micros;
+      inputQueue.push(data.event);
       postMessage({type:"INPUT_ACK"});
     } else if(data.type==="TICK" && !stopped) {
-      exactKeys(data,["type","dtMicros"],"TICK");
-      if(!instance || !ex || data.dtMicros!==16667) throw Error("invalid fixed timestep");
-      status(ex.game_update(data.dtMicros),"game_update");
+      exactKeys(data,["type","dtMicros","steps"],"TICK");
+      const steps=data.steps===undefined?1:data.steps;
+      if(!instance || !ex || data.dtMicros!==16667 || !Number.isInteger(steps) || steps<1 || steps>6) throw Error("invalid fixed timestep/batch size");
+      for(let i=0;i<steps;i++) {
+        simulationTimeMicros+=data.dtMicros;
+        if(!Number.isSafeInteger(simulationTimeMicros)) throw Error("simulation clock overflow");
+        while(inputQueue.length && inputQueue[0].timestamp_micros<=simulationTimeMicros) deliverInput(inputQueue.shift());
+        status(ex.game_update(data.dtMicros),"game_update");
+      }
       const d=dimensions(),ptr=u32(ex.game_get_render_buffer_ptr()),len=u32(ex.game_get_render_buffer_len());
       if(len<d.bytes) throw Error("render buffer too small");
       range(ptr,len);
@@ -174,7 +189,7 @@ onmessage = async ({data}) => {
       exactKeys(data,["type"],"SHUTDOWN");
       if(stopped) throw Error("shutdown after worker stopped");
       if(!instance || !ex) throw Error("shutdown before initialization");
-      stopped=true; try { ex.game_shutdown(); } finally { postMessage({type:"SHUTDOWN_ACK"}); close(); }
+      stopped=true; inputQueue=[]; try { ex.game_shutdown(); } finally { postMessage({type:"SHUTDOWN_ACK"}); close(); }
     } else {
       throw Error("unknown worker message type or invalid lifecycle state");
     }

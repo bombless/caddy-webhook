@@ -1,4 +1,4 @@
-const DEFAULTS = { maxModuleBytes: 16*1024*1024, maxMemoryPages: 256, maxOutputBytes: 4*1024*1024, watchdogMs: 1000, maxQueue: 128 };
+const DEFAULTS = { maxModuleBytes: 16*1024*1024, maxMemoryPages: 256, maxOutputBytes: 4*1024*1024, watchdogMs: 1000, maxQueue: 128, renderHz: 30 };
 const KEY_CODES = new Set(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","Space","Enter","Escape"]);
 const safePath = p => {
   if (typeof p !== "string" || !p.length || p.length > 240 || p.startsWith("/") || p.includes("\\") || /[%\u0000-\u001f\u007f]/.test(p) || !/^[A-Za-z0-9._/-]+$/.test(p) || /^[a-z][a-z0-9+.-]*:/i.test(p)) return false;
@@ -26,7 +26,11 @@ async function readLimited(response, limit, label) {
 export class WasmGamePlayer {
   constructor(canvas, options={}) {
     if(!(canvas instanceof HTMLCanvasElement)) throw new TypeError("canvas required");
-    this.canvas=canvas; this.options={...DEFAULTS,...options}; this.inputWindowStart=0; this.inputCount=0; this.lastPointerMove=0; this.pendingInputs=0; this._watchdogTimer=null; this.startedAt=0; this.held=new Set(); this.running=false; this.disposed=false; this.last=0; this.acc=0; this.step=1/60; this.worker=null; this.loading=false; this._inputAttached=false; this._lastLoad=null; this._busy=false; this._loadController=null;
+    this.canvas=canvas; this.options={...DEFAULTS,...options};
+    const renderHz=Number.isFinite(this.options.renderHz)?this.options.renderHz:DEFAULTS.renderHz;
+    this.renderInterval=1/Math.min(60,Math.max(10,renderHz));
+    this.maxCatchUpSteps=6;
+    this.inputWindowStart=0; this.inputCount=0; this.lastPointerMove=0; this.pendingInputs=0; this._watchdogTimer=null; this.startedAt=0; this.simulationMicros=0; this.held=new Set(); this.running=false; this.disposed=false; this.last=0; this.lastRender=0; this.acc=0; this.step=1/60; this.worker=null; this.loading=false; this._inputAttached=false; this._lastLoad=null; this._busy=false; this._loadController=null;
     if (canvas.tabIndex < 0) canvas.tabIndex = 0;
     this.ctx=canvas.getContext("2d",{alpha:false}); if(!this.ctx) throw Error("2D canvas unavailable");
     this._key=e=>this._keyEvent(e); this._pointer=e=>this._pointerEvent(e);
@@ -187,7 +191,7 @@ export class WasmGamePlayer {
     this.canvas.removeEventListener("focusout",this._focusout);
   }
   _keyEvent(e) {
-    if(!this.manifest.runtime.capabilities.includes("input.keyboard")||!KEY_CODES.has(e.code)) return;
+    if(!this.running||!this.manifest.runtime.capabilities.includes("input.keyboard")||!KEY_CODES.has(e.code)) return;
     // Keyboard input belongs only to the player the user has focused. Without
     // this guard every mounted game would consume page-level shortcuts.
     const active=document.activeElement;
@@ -196,7 +200,7 @@ export class WasmGamePlayer {
     e.preventDefault(); this._send({type:e.type==="keydown"?"KEY_DOWN":"KEY_UP",code:e.code,modifiers:(e.shiftKey?1:0)|(e.ctrlKey?2:0)|(e.altKey?4:0)|(e.metaKey?8:0),timestamp_micros:this._timestampMicros()});
   }
   _pointerEvent(e) {
-    if(!this.manifest.runtime.capabilities.includes("input.pointer")) return;
+    if(!this.running||!this.manifest.runtime.capabilities.includes("input.pointer")) return;
     if(e.type==="pointerdown") this.canvas.focus?.({preventScroll:true});
     const now=performance.now(); if(e.type==="pointermove" && now-this.lastPointerMove<16)return; if(e.type==="pointermove")this.lastPointerMove=now;
     const {x,y}=this._logicalPoint(e.clientX,e.clientY);
@@ -216,7 +220,7 @@ export class WasmGamePlayer {
       y:Math.max(0,Math.min(this.height,(clientY-top)/scale))
     };
   }
-  _timestampMicros() { return Math.max(0,Math.round((performance.now()-this.startedAt)*1000)); }
+  _timestampMicros() { return this.simulationMicros+Math.max(0,Math.round(this.acc*1000000)); }
   _send(event) {
     if(!this.worker || this.pendingInputs>=this.options.maxQueue+(event.type==="KEY_UP"?32:0))return;
     const now=performance.now(); if(now-this.inputWindowStart>=1000){this.inputWindowStart=now;this.inputCount=0;}
@@ -224,12 +228,18 @@ export class WasmGamePlayer {
     this.worker.postMessage({type:"INPUT",event});
   }
   _clearInput() { for(const code of this.held)this._send({type:"KEY_UP",code,modifiers:0,timestamp_micros:this._timestampMicros()});this.held.clear(); }
-  resume() { if(this.disposed||!this.worker||this.running)return;this.running=true;this.last=performance.now();this.acc=0;this._raf=requestAnimationFrame(t=>this._tick(t)); }
-  pause() { if(this.running){this.running=false;cancelAnimationFrame(this._raf);} this._clearInput(); }
+  resume() { if(this.disposed||!this.worker||this.running)return;this.running=true;this.last=performance.now();this.lastRender=0;this.acc=0;this._raf=requestAnimationFrame(t=>this._tick(t)); }
+  pause() { if(this.running){this.running=false;cancelAnimationFrame(this._raf);this.simulationMicros+=Math.max(0,Math.round(this.acc*1000000));this.acc=0;} this._clearInput(); }
   _tick(now) {
     if(!this.running)return;
     const elapsed=Math.min((now-this.last)/1000,0.1);this.last=now;this.acc=Math.min(this.acc+elapsed,0.1);
-    if(this.acc>=this.step&&!this._busy){this._timedPost({type:"TICK",dtMicros:16667});this.acc-=this.step;}
+    const availableSteps=Math.floor((this.acc+1e-9)/this.step);
+    if(availableSteps>0&&now-this.lastRender>=this.renderInterval&&!this._busy){
+      const steps=Math.min(availableSteps,this.maxCatchUpSteps);
+      this.acc=Math.max(0,this.acc-steps*this.step);this.lastRender=now;
+      this.simulationMicros+=steps*16667;
+      this._timedPost({type:"TICK",dtMicros:16667,steps});
+    }
     this._raf=requestAnimationFrame(t=>this._tick(t));
   }
   _timedPost(message) {

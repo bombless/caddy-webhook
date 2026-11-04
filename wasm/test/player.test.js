@@ -225,7 +225,7 @@ test("keyboard input is captured only by the focused player and focus loss relea
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 320, height: 180 }) };
   let focused = false;
   Object.assign(instance, {
-    canvas, width: 320, height: 180,
+    canvas, width: 320, height: 180, running: true,
     manifest: { runtime: { capabilities: ["input.keyboard", "input.pointer"] } },
     held: new Set(), startedAt: performance.now(), _send: event => sent.push(event),
     _focusout: () => instance._clearInput()
@@ -286,6 +286,59 @@ test("resume restarts the fixed-step loop after pause and resets accumulated tim
   }
 });
 
+
+test("input timestamps use the pause-aware simulation clock", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  Object.assign(instance, { simulationMicros: 50000, acc: 0.002 });
+  assert.equal(instance._timestampMicros(), 52000);
+});
+
+test("pause commits fractional simulation time without advancing paused wall time", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  const original = globalThis.cancelAnimationFrame;
+  globalThis.cancelAnimationFrame = () => {};
+  try {
+    Object.assign(instance, {
+      running: true, _raf: 1, simulationMicros: 50000, acc: 0.002,
+      _clearInput: () => {}
+    });
+    instance.pause();
+    assert.equal(instance.simulationMicros, 52000);
+    assert.equal(instance.acc, 0);
+    assert.equal(instance._timestampMicros(), 52000);
+  } finally {
+    if (original === undefined) delete globalThis.cancelAnimationFrame;
+    else globalThis.cancelAnimationFrame = original;
+  }
+});
+
+test("simulation stays at 60 Hz while presentation is capped at 30 Hz", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  const posted = [];
+  const original = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = () => 1;
+  try {
+    Object.assign(instance, {
+      running: true, last: 0, lastRender: 0, acc: 0, step: 1 / 60,
+      renderInterval: 1 / 30, maxCatchUpSteps: 6, simulationMicros: 0, _busy: false,
+      _timedPost: message => { posted.push(message); instance._busy = true; }
+    });
+    instance._tick(34);
+    assert.deepEqual(posted, [{ type: "TICK", dtMicros: 16667, steps: 2 }]);
+    assert.equal(instance.simulationMicros, 33334);
+    assert.ok(Math.abs(instance.acc - (34 / 1000 - 2 / 60)) < 1e-9, "retain the fractional remainder after fixed updates");
+    instance._tick(50);
+    assert.equal(posted.length, 1, "do not render again before the 30 Hz presentation interval");
+    instance._busy = false;
+    instance._tick(68);
+    assert.deepEqual(posted[1], { type: "TICK", dtMicros: 16667, steps: 2 });
+    assert.equal(instance.simulationMicros, 66668);
+    assert.equal(posted.length, 2);
+  } finally {
+    if (original === undefined) delete globalThis.requestAnimationFrame;
+    else globalThis.requestAnimationFrame = original;
+  }
+});
 
 test("malformed and unknown worker messages terminate the worker and report an error", () => {
   for (const message of [

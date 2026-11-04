@@ -126,6 +126,74 @@ test("valid module initializes and produces a copied RGBA frame", async () => {
   assert.equal(h.messages[1].frame.byteLength, 4);
 });
 
+test("headless replay batches fixed updates and produces deterministic state/frame output", async () => {
+  const replay = async () => {
+    let ticks = 0;
+    const inputs = [];
+    const inputsAtUpdates = [];
+    const h = harness({ exports: {
+      game_input: (ptr, len) => {
+        inputs.push(JSON.parse(new TextDecoder().decode(new Uint8Array(h.memory.buffer, ptr, len))));
+        return 0;
+      },
+      game_update: dt => { assert.equal(dt, 16667); inputsAtUpdates.push(inputs.length); ticks++; return 0; },
+      game_render: (ptr, len) => {
+        new Uint8Array(h.memory.buffer, ptr, len).set([ticks, inputs.length, inputs[0]?.type === "KEY_DOWN" ? 1 : 0, 255]);
+        return len;
+      }
+    }});
+    await h.init();
+    for (const event of [
+      { type: "KEY_DOWN", code: "KeyW", modifiers: 0, timestamp_micros: 1000 },
+      { type: "KEY_UP", code: "KeyW", modifiers: 0, timestamp_micros: 17000 }
+    ]) await h.send({ type: "INPUT", event });
+    await h.send({ type: "TICK", dtMicros: 16667, steps: 3 });
+    const frame = [...new Uint8Array(h.messages.at(-1).frame)];
+    assert.equal(h.messages.at(-1).type, "FRAME");
+    return { ticks, inputs, inputsAtUpdates, frame };
+  };
+  const first = await replay();
+  const second = await replay();
+  assert.deepEqual(first, second);
+  assert.equal(first.ticks, 3);
+  assert.deepEqual(first.inputs.map(event => [event.type, event.timestamp_micros]), [
+    ["KEY_DOWN", 1000], ["KEY_UP", 17000]
+  ]);
+  assert.deepEqual(first.inputsAtUpdates, [1, 2, 2], "input transitions are delivered at their simulation-time boundary");
+  assert.deepEqual(first.frame, [3, 2, 1, 255]);
+});
+
+test("worker rejects input timestamps that move backwards", async () => {
+  const h = harness();
+  await h.init();
+  for (const timestamp_micros of [2000, 1000]) {
+    await h.send({ type: "INPUT", event: {
+      type: "KEY_DOWN", code: "KeyW", modifiers: 0, timestamp_micros
+    }});
+  }
+  assert.match(h.messages.at(-1).message, /timestamps must be monotonic/);
+});
+
+test("worker bounds queued input events", async () => {
+  const h = harness();
+  await h.init();
+  for (let i = 0; i < 257; i++) {
+    await h.send({ type: "INPUT", event: {
+      type: "KEY_DOWN", code: "KeyW", modifiers: 0, timestamp_micros: i
+    }});
+  }
+  assert.match(h.messages.at(-1).message, /input event queue limit exceeded/);
+});
+
+test("worker rejects tick batches outside the bounded range", async () => {
+  for (const steps of [0, 7, 1.5, "2"]) {
+    const h = harness();
+    await h.init();
+    await h.send({ type: "TICK", dtMicros: 16667, steps });
+    assert.match(h.messages.at(-1).message, /fixed timestep\/batch size/);
+  }
+});
+
 test("rejects malformed messages and invalid initialization limits", async () => {
   const h = harness();
   await h.send(null);

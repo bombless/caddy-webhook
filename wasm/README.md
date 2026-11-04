@@ -32,8 +32,10 @@ pause, and disposal paths also clear held input. Pointer and touch input use
 Pointer Events and are normalized to logical canvas coordinates after
 letterboxing. Input is bounded by `maxQueue`; new non-release events are
 dropped at capacity while up to 32 additional slots are reserved for key-up
-cleanup events. Simulation uses a fixed 1/60 s step and clamps accumulated
-elapsed time after suspension. The runtime requires a dedicated Worker, Canvas
+cleanup events. Simulation advances in fixed 1/60 s steps while presentation
+is capped independently (30 FPS by default; configure `renderHz` from 10 to 60).
+The player batches up to six fixed updates into each rendered frame to catch up
+after scheduling delays. Elapsed time is clamped after suspension. The runtime requires a dedicated Worker, Canvas
 2D, and module-capable browser.
 It does not provide audio, persistence, score, or asset capabilities yet;
 manifest capability declarations are requests and do not grant those services.
@@ -90,6 +92,16 @@ tests, and a full deterministic headless game harness remain follow-up work. The
 runtime also treats malformed or unsolicited Worker messages as fatal protocol
 errors and terminates the affected Worker before presenting the recoverable error UI. Keep
 capabilities disabled until host-side handlers and policy are implemented.
+
+The Worker accepts a bounded `steps` count on each `TICK` (1–6), applies that
+many identical 16,667-microsecond updates in order, and renders exactly once.
+This keeps simulation cadence independent of presentation cadence without
+introducing variable-delta game updates. The headless replay test supplies
+explicit input timestamps and fixed update batches, then compares state-derived
+frame output across identical runs. Input messages are queued (up to 256) and
+delivered immediately before the first simulation update at or after each
+event timestamp, preserving short key transitions inside a multi-step batch.
+Timestamps use the simulation clock, so paused wall time is excluded.
 
 Run the repository's normal static deployment after copying these files into
 the frontend's `dist/wasm/` output.

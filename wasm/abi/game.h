@@ -63,7 +63,8 @@ uint32_t game_get_render_buffer_len(void);
  *   KEY_DOWN/KEY_UP: {type,code,modifiers,timestamp_micros}
  *   POINTER_DOWN/UP/MOVE/CANCEL: {type,x,y,code,buttons,modifiers,timestamp_micros}
  * Coordinates are finite logical-canvas pixels. timestamp_micros is a
- * monotonic microsecond timestamp relative to game start. All JSON is
+ * monotonic microsecond timestamp on the simulation timeline (paused wall
+ * time is excluded). All JSON is
  * length-delimited, has no trailing NUL, and must fit the reported capacity.
  * These regions MUST NOT overlap the framebuffer or mutable game state.
  */

@@ -62,7 +62,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - [x] Define bounded input queue capacity and an explicit overflow policy: drop new non-release input at capacity while reserving 32 slots for key-release events.
 - [x] Prevent browser defaults only for keys captured by the active player; the canvas is focusable and pointer interaction focuses it.
 - [x] Add an accumulator-based fixed timestep; clamp elapsed time after tab suspension.
-- [ ] Separate simulation tick rate from render/presentation rate and cap both.
+- [x] Separate simulation tick rate from render/presentation rate and cap both; the player defaults to 60 Hz simulation / 30 FPS presentation and the Worker bounds each render batch to six fixed updates.
 - [ ] Make deterministic replay possible without relying on wall-clock timing.
 
 ## P1 — Host capability/event protocol
@@ -223,3 +223,12 @@ CI validation (2026-11-04): initial runs [41841293121](https://github.com/bomble
 - INPUT_ACK is accepted only when an input is outstanding; FRAME is accepted only as the response to an in-flight tick and only with the exact dimensions, byte length, and message shape. Canvas upload exceptions also enter the same cleanup path.
 - Added player regression tests for malformed messages, invalid acknowledgements, malformed frame buffers, unknown message types, unsolicited valid-looking frames, and cleanup of worker handlers/watchdog state.
 - Changes are committed on feat/wasm-plugin-runtime; CI validation for this batch is pending. This is a targeted audit improvement, not completion of the broader lifecycle audit or browser-level validation.
+
+
+## Implementation progress (2026-11-05, simulation/presentation cadence)
+
+- Decoupled simulation from presentation: the player retains a fixed 60 Hz update step and caps rendering independently at 30 FPS by default (`renderHz` is configurable from 10–60).
+- The host batches up to six fixed updates into one Worker `TICK`; the Worker validates the batch bound and runs each update with the same 16,667-microsecond delta before rendering once. This avoids variable-delta catch-up and reduces redundant framebuffer transfers on high-refresh displays.
+- Added player timing coverage for two simulation steps per 30 FPS frame, a worker batch-range rejection test, and a deterministic headless replay test that supplies explicit input timestamps/fixed ticks and compares state-derived frame bytes across repeated runs. The replay uses controlled guest exports; it is not yet a deterministic replay of a checked-in sample game module.
+- The Worker queues input events and delivers them before the first fixed update at/after each simulation timestamp; paused wall time is excluded. This preserves short key transitions within batched ticks.
+- Local validation: `npm run check:wasm` passes; `npm run test:wasm` passes all 37 tests. Browser Canvas/focus testing and a public replay API remain outstanding.
