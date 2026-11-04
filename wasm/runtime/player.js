@@ -1,7 +1,7 @@
 const DEFAULTS = { maxModuleBytes: 16*1024*1024, maxMemoryPages: 256, maxOutputBytes: 4*1024*1024, watchdogMs: 1000, maxQueue: 128 };
 const KEY_CODES = new Set(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","Space","Enter","Escape"]);
 const safePath = p => {
-  if (typeof p !== "string" || !p.length || p.length > 240 || p.startsWith("/") || p.includes("\\\\") || /[%\\u0000-\\u001f\\u007f]/.test(p) || /^[a-z][a-z0-9+.-]*:/i.test(p)) return false;
+  if (typeof p !== "string" || !p.length || p.length > 240 || p.startsWith("/") || p.includes("\\") || /[%\u0000-\u001f\u007f]/.test(p) || /^[a-z][a-z0-9+.-]*:/i.test(p)) return false;
   let decoded; try { decoded = decodeURIComponent(p); } catch { return false; }
   return decoded === p && !p.split("/").some(x => !x || x === "." || x === "..");
 };
@@ -69,7 +69,7 @@ export class WasmGamePlayer {
   }
   _validateManifest(m) {
     if(!m||typeof m!=="object"||Array.isArray(m)||m.manifestVersion!==1||m.pluginType!=="wasm"||!m.runtime||m.runtime.apiVersion!=="1") throw Error("invalid plugin manifest");
-    if(typeof m.name!=="string"||!m.name.trim()||m.name.length>120||typeof m.version!=="string"||!/^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(m.version)) throw Error("invalid plugin metadata");
+    if(typeof m.name!=="string"||!m.name.trim()||m.name.length>120||typeof m.version!=="string"||!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(m.version)) throw Error("invalid plugin metadata");
     const allowedTop=new Set(["manifestVersion","id","name","version","pluginType","entry","runtime"]);
     if(Object.keys(m).some(k=>!allowedTop.has(k))) throw Error("unknown manifest field");
     if(!/^[a-z0-9][a-z0-9-]{0,63}$/.test(m.id||"")||!safePath(m.entry)||!m.entry.endsWith(".wasm")) throw Error("invalid plugin id or entry");
@@ -119,10 +119,10 @@ export class WasmGamePlayer {
   _send(event) {
     if(!this.worker || this.pendingInputs>=this.options.maxQueue+(event.type==="KEY_UP"?32:0))return;
     const now=performance.now(); if(now-this.inputWindowStart>=1000){this.inputWindowStart=now;this.inputCount=0;}
-    if(this.inputCount>=128)return; this.inputCount++; this.pendingInputs++;
+    if(this.inputCount>=128 && event.type!=="KEY_UP")return; this.inputCount++; this.pendingInputs++;
     this.worker.postMessage({type:"INPUT",event});
   }
-  _clearInput() { for(const code of this.held)this._send({type:"KEY_UP",code,modifiers:0,timestamp_micros:Math.round(performance.now()*1000)});this.held.clear(); }
+  _clearInput() { for(const code of this.held)this._send({type:"KEY_UP",code,modifiers:0,timestamp_micros:this._timestampMicros()});this.held.clear(); }
   resume() { if(this.disposed||!this.worker||this.running)return;this.running=true;this.last=performance.now();this.acc=0;this._raf=requestAnimationFrame(t=>this._tick(t)); }
   pause() { if(!this.running)return;this.running=false;cancelAnimationFrame(this._raf);this._clearInput(); }
   _tick(now) {
