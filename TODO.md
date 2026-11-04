@@ -35,11 +35,11 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - [x] Verify memory limits against the actual instantiated memory, including modules that declare or grow memory unexpectedly.
 - [x] Bound every message, input queue, event queue, render payload, and host capability request.
 - [x] Validate pointers, lengths, dimensions, multiplication/addition overflow, enum values, numeric finiteness, and guest return values at every boundary.
-- [ ] Define watchdog semantics and test that an unresponsive guest can be terminated without blocking the main thread.
-- [ ] Handle worker errors, traps, malformed messages, fetch failures, aborts, and disposal without leaking workers, listeners, object URLs, or animation callbacks.
+- [x] Define tick-scoped watchdog semantics; worker termination is implemented. (Automated timeout/termination coverage remains in the test section.)
+- [ ] Finish auditing and testing cleanup/error paths for worker errors, traps, malformed messages, fetch failures, aborts, and disposal; verify no workers, listeners, object URLs, or animation callbacks leak.
 - [x] Ensure pause, blur, visibility changes, and disposal clear held input and stop simulation.
 - [ ] Add a user-visible recoverable error state; do not silently leave a blank or frozen player.
-- [ ] Document the security boundary accurately: worker isolation and capability restriction are fault containment, not a guarantee that arbitrary WASM is harmless.
+- [x] Document the security boundary accurately: worker isolation and capability restriction are fault containment, not a guarantee that arbitrary WASM is harmless.
 
 ## P0 — Automated ABI and runtime tests
 
@@ -116,6 +116,22 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - [ ] Complete the design document's validation checklist with links to corresponding tests.
 - [ ] Review the implementation against every requirement in `docs/design/wasm-plugin.md`.
 - [ ] Obtain maintainer review and resolve all review comments before declaring ABI v1 stable.
+
+## Handoff / next session
+
+Current working branch: `feat/wasm-plugin-runtime`.
+
+Latest known commit before this TODO refresh: `d2c0ef5adb1726362dfccd178c701cdcca937530`.
+
+The ABI v1 contract and the first round of loader/worker hardening are implemented, but **have not been validated by running tests or a browser**. Do not describe the runtime as production-ready. The next session should:
+
+1. Re-read this TODO and inspect the current branch before editing; the checklist is the source of truth.
+2. Add a minimal valid WASM fixture plus invalid fixtures, then implement runnable ABI/worker tests and CI (P0). Prefer tests that execute the actual `worker.js` logic rather than duplicating its validation rules.
+3. Run syntax checks and all available tests; fix issues found and record exact commands/results here.
+4. Only then continue with the user-visible recoverable error state and the remaining lifecycle cleanup audit.
+5. Keep frontend integration explicitly blocked until the actual frontend source/repository and deployment workflow are identified; this repository currently appears to provide the webhook/static deployment side rather than the frontend shell.
+
+No automated tests, build, or browser validation have been run as part of the work recorded above.
 
 ## Suggested execution order
 
