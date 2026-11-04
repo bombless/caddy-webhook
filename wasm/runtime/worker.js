@@ -170,12 +170,13 @@ onmessage = async ({data}) => {
       if(rendered!==d.bytes) throw Error("game_render returned unexpected byte count");
       const frame=new Uint8Array(d.bytes); frame.set(new Uint8Array(memory.buffer,ptr,d.bytes));
       postMessage({type:"FRAME",width:d.width,height:d.height,frame:frame.buffer},[frame.buffer]);
-    } else if(data.type==="SHUTDOWN" && !stopped) {
+    } else if(data.type==="SHUTDOWN") {
       exactKeys(data,["type"],"SHUTDOWN");
+      if(stopped) throw Error("shutdown after worker stopped");
       if(!instance || !ex) throw Error("shutdown before initialization");
       stopped=true; try { ex.game_shutdown(); } finally { postMessage({type:"SHUTDOWN_ACK"}); close(); }
-    } else if(data.type!=="INIT" && data.type!=="SHUTDOWN") {
-      throw Error("unknown worker message type");
+    } else {
+      throw Error("unknown worker message type or invalid lifecycle state");
     }
   } catch(e) { fail(e && e.message || e); }
 };
