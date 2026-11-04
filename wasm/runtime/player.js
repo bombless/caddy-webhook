@@ -159,7 +159,7 @@ export class WasmGamePlayer {
       this._failWorker(Error(data.message)); return;
     }
     if(data.type==="FRAME") {
-      if(Object.keys(data).length!==4||data.width!==this.width||data.height!==this.height||
+      if(!this._busy||Object.keys(data).length!==4||data.width!==this.width||data.height!==this.height||
         !(data.frame instanceof ArrayBuffer)||data.frame.byteLength!==this.width*this.height*4) {
         this._failWorker(Error("invalid framebuffer message from worker")); return;
       }
