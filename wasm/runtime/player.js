@@ -64,6 +64,15 @@ export class WasmGamePlayer {
       }},[bytes]);
     });
     this.worker.onmessage=({data})=>this._message(data);
+    this.worker.onerror=()=>{
+      clearTimeout(this._watchdogTimer); this._watchdogTimer=null;
+      this.pause(); this.worker?.terminate(); this.worker=null; this.pendingInputs=0; this._busy=false;
+      this.options.onError?.(Error("WASM worker failed"));
+    };
+    this.worker.onmessageerror=()=>{
+      this.pause(); this.worker?.terminate(); this.worker=null; this.pendingInputs=0; this._busy=false;
+      this.options.onError?.(Error("WASM worker message could not be decoded"));
+    };
     this.startedAt=performance.now();
     this._attachInput(); this.resume(); return manifest;
   }
@@ -146,6 +155,15 @@ export class WasmGamePlayer {
     window.removeEventListener("keydown",this._key);window.removeEventListener("keyup",this._key);
     this.canvas.removeEventListener("pointerdown",this._pointer);this.canvas.removeEventListener("pointerup",this._pointer);this.canvas.removeEventListener("pointermove",this._pointer);this.canvas.removeEventListener("pointercancel",this._pointer);
     window.removeEventListener("blur",this._blur);document.removeEventListener("visibilitychange",this._visibility);
-    if(this.worker){this.worker.postMessage({type:"SHUTDOWN"});this.worker.terminate();this.worker=null;}
+    if(this.worker){
+      const worker=this.worker; this.worker=null; clearTimeout(this._watchdogTimer); this._watchdogTimer=null;
+      await new Promise(resolve=>{
+        let finished=false;
+        const finish=()=>{if(finished)return;finished=true;clearTimeout(timer);worker.terminate();resolve();};
+        const timer=setTimeout(finish,100);
+        worker.addEventListener("message",({data})=>{if(data?.type==="SHUTDOWN_ACK")finish();});
+        try { worker.postMessage({type:"SHUTDOWN"}); } catch { finish(); }
+      });
+    }
   }
 }
