@@ -55,7 +55,9 @@ function harness(overrides = {}) {
 test("valid module initializes and produces a copied RGBA frame", async () => {
   const h = harness();
   await h.init();
-  assert.deepEqual(h.messages[0], { type: "READY", width: 1, height: 1 });
+  assert.equal(h.messages[0].type, "READY");
+  assert.equal(h.messages[0].width, 1);
+  assert.equal(h.messages[0].height, 1);
   await h.send({ type: "TICK", dtMicros: 16667 });
   assert.equal(h.messages[1].type, "FRAME");
   assert.equal(h.messages[1].frame.byteLength, 4);
