@@ -91,7 +91,7 @@ export class WasmGamePlayer {
       try { worker.postMessage({type:"INIT",bytes:bytes.buffer,config:{...config,runtime:manifest.runtime},limits:{
         maxMemoryPages:Math.min(caps.maxMemoryPages,this.options.maxMemoryPages),
         maxOutputBytes:Math.min(caps.maxOutputBytes,this.options.maxOutputBytes)
-      }},[bytes]); } catch(error) { finish(error); }
+      }},[bytes.buffer]); } catch(error) { finish(error); }
     });
     this.worker.onmessage=({data})=>this._message(data);
     this.worker.onerror=()=>{
