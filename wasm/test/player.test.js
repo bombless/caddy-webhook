@@ -58,6 +58,21 @@ test("validates a complete manifest and rejects invalid fields", () => {
   }
 });
 
+test("manifest capabilities require explicit host grants and unsupported services stay disabled", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  const manifest = validManifest();
+  manifest.runtime.capabilities = ["input.keyboard", "input.pointer", "audio", "storage", "score"];
+
+  instance.options = { grantedCapabilities: [] };
+  assert.deepEqual(instance._grantCapabilities(manifest).runtime.capabilities, []);
+
+  instance.options = { grantedCapabilities: ["input.keyboard"] };
+  const granted = instance._grantCapabilities(manifest);
+  assert.deepEqual(granted.runtime.capabilities, ["input.keyboard"]);
+  assert.deepEqual(manifest.runtime.capabilities, ["input.keyboard", "input.pointer", "audio", "storage", "score"],
+    "granting capabilities must not mutate the parsed manifest");
+});
+
 test("readLimited accepts bodies within limit without Content-Length", async () => {
   const response = new Response(new Uint8Array([1, 2, 3]));
   const bytes = await readLimited(response, 3, "fixture");
