@@ -26,7 +26,7 @@ async function readLimited(response, limit, label) {
 export class WasmGamePlayer {
   constructor(canvas, options={}) {
     if(!(canvas instanceof HTMLCanvasElement)) throw new TypeError("canvas required");
-    this.canvas=canvas; this.options={...DEFAULTS,...options}; this.inputWindowStart=0; this.inputCount=0; this.lastPointerMove=0; this.held=new Set(); this.running=false; this.disposed=false; this.last=0; this.acc=0; this.step=1/60; this.worker=null;
+    this.canvas=canvas; this.options={...DEFAULTS,...options}; this.inputWindowStart=0; this.inputCount=0; this.lastPointerMove=0; this.pendingInputs=0; this._watchdogTimer=null; this.startedAt=0; this.held=new Set(); this.running=false; this.disposed=false; this.last=0; this.acc=0; this.step=1/60; this.worker=null;
     this.ctx=canvas.getContext("2d",{alpha:false}); if(!this.ctx) throw Error("2D canvas unavailable");
     this._key=e=>this._keyEvent(e); this._pointer=e=>this._pointerEvent(e);
     this._blur=()=>this._clearInput(); this._visibility=()=>{if(document.hidden)this.pause();};
@@ -64,6 +64,7 @@ export class WasmGamePlayer {
       }},[bytes]);
     });
     this.worker.onmessage=({data})=>this._message(data);
+    this.startedAt=performance.now();
     this._attachInput(); this.resume(); return manifest;
   }
   _validateManifest(m) {
@@ -84,8 +85,14 @@ export class WasmGamePlayer {
     if(Object.keys(w).some(k=>!["abi","abiVersion","maxMemoryPages","maxOutputBytes","renderMode"].includes(k))) throw Error("unknown WASM field");
   }
   _message(data) {
-    if(data.type==="ERROR"){this.pause();this.worker?.terminate();this.worker=null;this.options.onError?.(new Error(data.message));return;}
+    if(data.type==="INPUT_ACK"){this.pendingInputs=Math.max(0,this.pendingInputs-1);return;}
+    if(data.type==="ERROR"){
+      clearTimeout(this._watchdogTimer); this._watchdogTimer=null; this._busy=false;
+      this.pause();this.worker?.terminate();this.worker=null;this.pendingInputs=0;
+      this.options.onError?.(new Error(data.message));return;
+    }
     if(data.type==="FRAME" && data.width===this.width && data.height===this.height && data.frame instanceof ArrayBuffer && data.frame.byteLength===this.width*this.height*4) {
+      clearTimeout(this._watchdogTimer); this._watchdogTimer=null; this._busy=false;
       this.ctx.putImageData(new ImageData(new Uint8ClampedArray(data.frame),this.width,this.height),0,0);
     }
   }
@@ -98,7 +105,7 @@ export class WasmGamePlayer {
   _keyEvent(e) {
     if(!this.manifest.runtime.capabilities.includes("input.keyboard")||!KEY_CODES.has(e.code)) return;
     if(e.type==="keydown"){if(this.held.has(e.code))return;this.held.add(e.code);} else this.held.delete(e.code);
-    e.preventDefault(); this._send({type:e.type==="keydown"?"KEY_DOWN":"KEY_UP",code:e.code,modifiers:(e.shiftKey?1:0)|(e.ctrlKey?2:0)|(e.altKey?4:0)|(e.metaKey?8:0),timestamp_micros:Math.max(0,Math.round(performance.now()*1000))});
+    e.preventDefault(); this._send({type:e.type==="keydown"?"KEY_DOWN":"KEY_UP",code:e.code,modifiers:(e.shiftKey?1:0)|(e.ctrlKey?2:0)|(e.altKey?4:0)|(e.metaKey?8:0),timestamp_micros:this._timestampMicros()});
   }
   _pointerEvent(e) {
     if(!this.manifest.runtime.capabilities.includes("input.pointer")) return;
@@ -106,12 +113,13 @@ export class WasmGamePlayer {
     const r=this.canvas.getBoundingClientRect(),x=(e.clientX-r.left)*this.width/r.width,y=(e.clientY-r.top)*this.height/r.height;
     const type={pointerdown:"POINTER_DOWN",pointerup:"POINTER_UP",pointermove:"POINTER_MOVE",pointercancel:"POINTER_CANCEL"}[e.type];
     if(type!=="POINTER_MOVE" && this.canvas.setPointerCapture && e.type==="pointerdown") this.canvas.setPointerCapture(e.pointerId);
-    this._send({type,x:Math.max(0,Math.min(this.width,x)),y:Math.max(0,Math.min(this.height,y)),code:e.button,buttons:e.buttons,modifiers:(e.shiftKey?1:0)|(e.ctrlKey?2:0)|(e.altKey?4:0),timestamp_micros:Math.round(performance.now()*1000)});
+    this._send({type,x:Math.max(0,Math.min(this.width,x)),y:Math.max(0,Math.min(this.height,y)),code:e.button,buttons:e.buttons,modifiers:(e.shiftKey?1:0)|(e.ctrlKey?2:0)|(e.altKey?4:0),timestamp_micros:this._timestampMicros()});
   }
+  _timestampMicros() { return Math.max(0,Math.round((performance.now()-this.startedAt)*1000)); }
   _send(event) {
-    if(!this.worker)return;
+    if(!this.worker || this.pendingInputs>=this.options.maxQueue)return;
     const now=performance.now(); if(now-this.inputWindowStart>=1000){this.inputWindowStart=now;this.inputCount=0;}
-    if(this.inputCount>=128)return; this.inputCount++;
+    if(this.inputCount>=128)return; this.inputCount++; this.pendingInputs++;
     this.worker.postMessage({type:"INPUT",event});
   }
   _clearInput() { for(const code of this.held)this._send({type:"KEY_UP",code,modifiers:0,timestamp_micros:Math.round(performance.now()*1000)});this.held.clear(); }
@@ -125,8 +133,12 @@ export class WasmGamePlayer {
   }
   _timedPost(message) {
     if(this._busy)return;this._busy=true;
-    const timer=setTimeout(()=>{this.pause();this.worker?.terminate();this.worker=null;this.options.onError?.(Error("WASM watchdog timeout"));},this.options.watchdogMs);
-    this.worker.onmessage=e=>{clearTimeout(timer);this._busy=false;this._message(e.data);};
+    clearTimeout(this._watchdogTimer);
+    this._watchdogTimer=setTimeout(()=>{
+      this._watchdogTimer=null; this.pause(); this.worker?.terminate(); this.worker=null;
+      this.pendingInputs=0; this._busy=false;
+      this.options.onError?.(Error("WASM watchdog timeout"));
+    },this.options.watchdogMs);
     this.worker.postMessage(message);
   }
   async dispose() {
