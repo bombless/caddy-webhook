@@ -15,3 +15,11 @@ button { border: 1px solid #39445b; border-radius: 8px; padding: 7px 13px; color
 .error p { color: #fda4af }
 footer { justify-content: flex-end }
 footer span { margin-right: auto }
+
+.library { display: flex; align-items: center; flex-wrap: wrap; gap: 8px }
+.library-title { color: #9aa8bf; font-size: 13px; font-weight: 700; margin-right: 4px }
+.library button { display: inline-flex; align-items: center; gap: 8px; text-align: left }
+.library button small { color: #9aa8bf; font-size: 11px }
+.library button.selected { border-color: #8aa7e8; background: #25385e }
+.game-canvas { display: block; width: min(100%, 960px); height: auto; max-height: 100%; aspect-ratio: 16 / 9; object-fit: contain; outline: none }
+button:disabled { opacity: .45; cursor: not-allowed }
