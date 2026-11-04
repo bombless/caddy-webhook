@@ -85,8 +85,10 @@ terminates the worker if initialization or a tick exceeds the configured
 watchdog deadline. Guest shutdown is acknowledged with a bounded 100 ms wait
 before forced termination. A module can still consume its worker's CPU until
 termination. Capability events (audio/storage/score), formal
-JSON-schema validation in the player, cross-toolchain ABI conformance tests, invalid WASM fixtures, browser Canvas
-tests, and a full deterministic headless game harness remain follow-up work. Keep
+JSON-schema validation in the player, cross-toolchain ABI conformance tests, browser Canvas
+tests, and a full deterministic headless game harness remain follow-up work. The
+runtime also treats malformed or unsolicited Worker messages as fatal protocol
+errors and terminates the affected Worker before presenting the recoverable error UI. Keep
 capabilities disabled until host-side handlers and policy are implemented.
 
 Run the repository's normal static deployment after copying these files into
