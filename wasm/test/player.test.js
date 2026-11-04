@@ -413,3 +413,42 @@ test("rejects an unsolicited otherwise-valid framebuffer", () => {
   assert.equal(terminated, 1);
   assert.match(reported.message, /invalid framebuffer/);
 });
+
+
+test("input postMessage failure rolls back queue accounting and terminates the worker", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  let terminated = 0;
+  let reported;
+  const worker = { onmessage: 1, onerror: 1, onmessageerror: 1,
+    postMessage() { throw new Error("detached worker"); }, terminate() { terminated++; } };
+  Object.assign(instance, {
+    worker, pendingInputs: 0, options: { maxQueue: 128 }, inputWindowStart: 0,
+    inputCount: 0, held: new Set(), running: false, _busy: false,
+    _watchdogTimer: null, _inputAttached: false,
+    _reportError: error => { reported = error; }
+  });
+  instance._send({ type: "KEY_DOWN", code: "KeyW", modifiers: 0, timestamp_micros: 1 });
+  assert.equal(instance.pendingInputs, 0);
+  assert.equal(instance.worker, null);
+  assert.equal(terminated, 1);
+  assert.match(reported.message, /input delivery failed/);
+});
+
+test("tick postMessage failure clears watchdog state and reports a recoverable error", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  let terminated = 0;
+  let reported;
+  const worker = { onmessage: 1, onerror: 1, onmessageerror: 1,
+    postMessage() { throw new Error("worker unavailable"); }, terminate() { terminated++; } };
+  Object.assign(instance, {
+    worker, pendingInputs: 0, held: new Set(), running: false, _busy: false,
+    _watchdogTimer: null, _inputAttached: false,
+    options: { watchdogMs: 1000 }, _reportError: error => { reported = error; }
+  });
+  instance._timedPost({ type: "TICK", dtMicros: 16667, steps: 1 });
+  assert.equal(instance._watchdogTimer, null);
+  assert.equal(instance._busy, false);
+  assert.equal(instance.worker, null);
+  assert.equal(terminated, 1);
+  assert.match(reported.message, /message delivery failed/);
+});
