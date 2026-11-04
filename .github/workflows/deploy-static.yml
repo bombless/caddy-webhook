@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       build_command:
-        description: Optional shell command to build the site (for example: npm ci && npm run build)
+        description: "Optional shell command to build the site (for example: npm ci && npm run build)"
         required: false
         type: string
         default: ""
