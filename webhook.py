@@ -326,6 +326,7 @@ class Handler(BaseHTTPRequestHandler):
         if length < 1 or length > MAX_UPLOAD_BYTES:
             self.send_json(413, {'error': 'invalid_size'})
             return None
+        print('UPLOAD length parsed:', length, 'rfile position:', self.rfile.tell() if hasattr(self.rfile, 'tell') else 'n/a')
         fd, upload = tempfile.mkstemp(dir=os.path.join(ROOT, 'tmp'), suffix='.zip')
         try:
             with os.fdopen(fd, 'wb') as target:
