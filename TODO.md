@@ -198,3 +198,11 @@ CI validation (2026-11-04): initial runs [41841293121](https://github.com/bomble
 - Fixed a stray literal \\n in the worker test source that made the entire worker test module fail to parse (the syntax-check step did not cover test files).
 - GitHub Actions run [41855643294](https://github.com/bombless/caddy-webhook/actions/runs/41855643294) passed JavaScript syntax checks and the full player + worker test suite on commit `6366afb0784b523076897db81ca0d078607fde64`.
 - Real-browser Canvas/focus/held-key integration and deterministic game-state replay remain outstanding; this change does not establish production readiness.
+
+
+## Implementation progress (2026-11-04, complete ABI export signature regression coverage)
+
+- Added `wasm/test/abi-signatures.test.js`, which mutates the real ABI fixture's function type index one export at a time and verifies the Worker preflight rejects a signature mismatch for each of the 14 required ABI v1 function exports.
+- Added a positive control proving the unmodified real WASM fixture still initializes successfully.
+- This closes the unit-test gap for per-export signature rejection; it does not replace browser Canvas/focus/held-key tests or deterministic game-state replay.
+- GitHub Actions validation is triggered by commit `327fae6334b180905e276d175d632b4bf6911293`; results must be checked before treating this addition as green.
