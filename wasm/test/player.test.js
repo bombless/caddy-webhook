@@ -330,3 +330,18 @@ test("worker protocol failure clears a pending watchdog and detaches worker hand
   assert.equal(instance._watchdogTimer, null);
   assert.match(reported.message, /acknowledgement/);
 });
+
+
+test("rejects an unsolicited otherwise-valid framebuffer", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  let terminated = 0;
+  let reported;
+  Object.assign(instance, {
+    worker: { terminate: () => { terminated++; } }, width: 1, height: 1,
+    held: new Set(), pendingInputs: 0, _busy: false, _watchdogTimer: null,
+    running: false, _inputAttached: false, _reportError: error => { reported = error; }
+  });
+  instance._message({ type: "FRAME", width: 1, height: 1, frame: new ArrayBuffer(4) });
+  assert.equal(terminated, 1);
+  assert.match(reported.message, /invalid framebuffer/);
+});
