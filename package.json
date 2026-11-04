@@ -6,7 +6,7 @@
   "engines": { "node": ">=22 <23" },
   "scripts": {
     "dev": "vite",
-    "build": "npm run validate:example && vite build && vite build --config examples/hello-vue3/vite.config.ts",
+    "build": "npm run validate:example && vite build && vite build --config examples/hello-vue3/vite.config.ts && node scripts/copy-example-manifest.mjs",
     "preview": "vite preview",
     "validate:example": "node scripts/validate-plugin.mjs examples/hello-vue3",
     "test": "node --test"
