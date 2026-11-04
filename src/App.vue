@@ -7,23 +7,25 @@ const state = ref<PlayerState>('loading')
 const score = ref(0)
 const error = ref('')
 const gameUrl = new URLSearchParams(location.search).get('game') ?? './games/hello-vue3/'
-const runtime = ref<GamePlayerRuntime>()
+let runtime: GamePlayerRuntime | undefined
+let resize: (() => void) | undefined
 
 onMounted(() => {
   if (!frame.value) return
-  const player = new GamePlayerRuntime(frame.value, {
+  runtime = new GamePlayerRuntime(frame.value, {
     timeoutMs: 15000,
     onState: (value) => { state.value = value },
     onScore: (value) => { score.value = value },
     onError: (value) => { error.value = value.message },
   })
-  runtime.value = player
-  void player.load(gameUrl)
-  const resize = () => player.resize()
+  void runtime.load(gameUrl)
+  resize = () => runtime?.resize()
   window.addEventListener('resize', resize)
-  onBeforeUnmount(() => window.removeEventListener('resize', resize))
 })
-onBeforeUnmount(() => runtime.value?.dispose())
+onBeforeUnmount(() => {
+  if (resize) window.removeEventListener('resize', resize)
+  runtime?.dispose()
+})
 </script>
 
 <template>
