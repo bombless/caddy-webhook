@@ -331,7 +331,7 @@ test("input timestamps use the pause-aware simulation clock", () => {
   assert.equal(instance._timestampMicros(), 52000);
 });
 
-test("pause commits fractional simulation time without advancing paused wall time", () => {
+test("pause discards fractional simulation time without advancing paused wall time", () => {
   const instance = Object.create(WasmGamePlayer.prototype);
   const original = globalThis.cancelAnimationFrame;
   globalThis.cancelAnimationFrame = () => {};
@@ -341,9 +341,9 @@ test("pause commits fractional simulation time without advancing paused wall tim
       _clearInput: () => {}
     });
     instance.pause();
-    assert.equal(instance.simulationMicros, 52000);
+    assert.equal(instance.simulationMicros, 50000);
     assert.equal(instance.acc, 0);
-    assert.equal(instance._timestampMicros(), 52000);
+    assert.equal(instance._timestampMicros(), 50000);
   } finally {
     if (original === undefined) delete globalThis.cancelAnimationFrame;
     else globalThis.cancelAnimationFrame = original;
