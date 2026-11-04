@@ -1,0 +1,176 @@
+name: Reusable static deployment
+
+on:
+  workflow_call:
+    inputs:
+      build_command:
+        description: Optional shell command to build the site (for example: npm ci && npm run build)
+        required: false
+        type: string
+        default: ""
+      output_dir:
+        description: Directory containing the finished static site; use "." for root-level HTML
+        required: true
+        type: string
+      node_version:
+        description: Node.js version used when a build command is provided
+        required: false
+        type: string
+        default: "22"
+    secrets:
+      DEPLOY_WEBHOOK_URL:
+        required: true
+      DEPLOY_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: static-site-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        if: ${{ inputs.build_command != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Build static site
+        if: ${{ inputs.build_command != '' }}
+        env:
+          BUILD_COMMAND: ${{ inputs.build_command }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -euo pipefail -c "$BUILD_COMMAND"
+
+      - name: Prepare deployment archive
+        env:
+          OUTPUT_DIR: ${{ inputs.output_dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -d "$OUTPUT_DIR" ]; then
+            echo "::error::Configured output_dir does not exist: $OUTPUT_DIR"
+            exit 1
+          fi
+
+          rm -rf site site.zip
+          mkdir -p site
+          if [ "$OUTPUT_DIR" = "." ]; then
+            rsync -a \
+              --exclude='.git/' \
+              --exclude='.github/' \
+              --exclude='node_modules/' \
+              --exclude='site/' \
+              --exclude='site.zip' \
+              --exclude='README*' \
+              --exclude='AGENTS.md' \
+              ./ site/
+          else
+            rsync -a "$OUTPUT_DIR"/ site/
+          fi
+
+          if [ ! -f site/index.html ]; then
+            echo "::error::The deployment output must contain index.html at its root."
+            exit 1
+          fi
+
+          cd site
+          zip -qr ../site.zip .
+          test -s ../site.zip
+
+      - name: Check deployment configuration
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${DEPLOY_TOKEN:-}" ]; then
+            echo "::add-mask::${DEPLOY_TOKEN}"
+          fi
+          if [ -z "${DEPLOY_TOKEN:-}" ] || [ -z "${DEPLOY_WEBHOOK_URL:-}" ]; then
+            echo "::error::DEPLOY_TOKEN and DEPLOY_WEBHOOK_URL must both be configured as repository or organization Actions secrets."
+            exit 1
+          fi
+
+          DEPLOY_WEBHOOK_URL="$DEPLOY_WEBHOOK_URL" node <<'NODE'
+          const raw = process.env.DEPLOY_WEBHOOK_URL;
+          let url;
+          try {
+            url = new URL(raw);
+          } catch (error) {
+            console.error("::error::DEPLOY_WEBHOOK_URL is not a valid URL.");
+            process.exit(1);
+          }
+          if (url.protocol !== "https:" || !url.hostname || url.username || url.password) {
+            console.error("::error::DEPLOY_WEBHOOK_URL must be a valid https URL without embedded credentials.");
+            process.exit(1);
+          }
+          console.log(`Deploy endpoint: ${url.protocol}//${url.host}${url.pathname}`);
+          NODE
+
+      - name: Upload archive and deploy
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${DEPLOY_TOKEN}"
+          body_file="$(mktemp)"
+          code_file="$(mktemp)"
+          trap 'rm -f "$body_file" "$code_file"' EXIT
+
+          set +e
+          curl --silent --show-error \
+            --retry 0 \
+            --connect-timeout 15 \
+            --max-time 120 \
+            --output "$body_file" \
+            --write-out '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer ${DEPLOY_TOKEN}" \
+            -H 'Content-Type: application/zip' \
+            --data-binary @site.zip \
+            "$DEPLOY_WEBHOOK_URL" >"$code_file"
+          curl_exit=$?
+          set -e
+
+          http_code="$(tr -cd '0-9' <"$code_file" || true)"
+          echo "curl exit: $curl_exit"
+          echo "HTTP status: ${http_code:-<none>}"
+          echo "Webhook response:"
+          head -c 4000 "$body_file" || true
+          echo
+
+          if [ "$curl_exit" -ne 0 ]; then
+            case "$curl_exit" in
+              5|6) echo "::error::DNS/proxy resolution failed (curl exit $curl_exit)." ;;
+              7) echo "::error::TCP connection to the webhook failed (curl exit 7)." ;;
+              28) echo "::error::Webhook request timed out (curl exit 28)." ;;
+              35) echo "::error::TLS handshake failed (curl exit 35). TLS verification remains enabled." ;;
+              51|60) echo "::error::TLS certificate verification failed (curl exit $curl_exit)." ;;
+              *) echo "::error::Upload failed before receiving an HTTP response (curl exit $curl_exit)." ;;
+            esac
+            exit "$curl_exit"
+          fi
+
+          case "$http_code" in
+            2*) echo "Deployment accepted." ;;
+            400) echo "::error::Webhook rejected the ZIP archive (400 invalid_archive)."; exit 1 ;;
+            401) echo "::error::Webhook rejected DEPLOY_TOKEN (401 unauthorized)."; exit 1 ;;
+            413) echo "::error::Archive size is outside the webhook upload limit (413 invalid_size)."; exit 1 ;;
+            415) echo "::error::Webhook requires Content-Type application/zip (415 zip_required)."; exit 1 ;;
+            500) echo "::error::Webhook encountered an internal deployment error (500 internal_error)."; exit 1 ;;
+            *) echo "::error::Unexpected webhook HTTP status: ${http_code:-<none>}."; exit 1 ;;
+          esac
