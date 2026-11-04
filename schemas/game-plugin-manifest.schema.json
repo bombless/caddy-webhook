@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bombless.github.io/game-plugin/manifest-v1.schema.json",
+  "title": "Bombless Game Plugin Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifestVersion", "id", "name", "version", "pluginType", "entry", "runtime"],
+  "properties": {
+    "manifestVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$" },
+    "pluginType": { "const": "vue3" },
+    "entry": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?/)(?!.*\\\\)(?![a-zA-Z][a-zA-Z0-9+.-]*:).+$" },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["apiVersion", "display", "capabilities"],
+      "properties": {
+        "apiVersion": { "const": "1" },
+        "display": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "aspectRatio": { "type": "string", "maxLength": 16 },
+            "orientation": { "enum": ["landscape", "portrait", "any"] },
+            "resize": { "enum": ["contain", "cover"] }
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "maxLength": 64 }
+        }
+      }
+    }
+  }
+}
