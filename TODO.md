@@ -49,7 +49,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - [x] Add tests for module/package size limits, memory limits, and output bounds (streaming reader and manifest/runtime bounds; worker memory/output fixtures already cover the guest boundary).
 - [x] Add tests for worker message validation and malformed payloads.
 - [x] Add tests for watchdog timeout and worker termination.
-- [ ] Add tests for resume/dispose lifecycle and end-to-end held-key cleanup. (Dispose and pause/key-up paths are covered; explicit resume and browser-level held-key integration remain.)
+- [ ] Add browser tests for end-to-end held-key cleanup. (Unit coverage now includes resume, pause/key-up, graceful dispose, and in-flight fetch cancellation.)
 - [ ] Add browser tests that instantiate a real module and verify Canvas output.
 - [ ] Add a deterministic headless harness that supplies exact input events and fixed update ticks, then asserts known state/render results.
 - [ ] Run the tests in CI and document supported browsers and required test tooling.
@@ -148,7 +148,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 
 - Added player-level regression tests proving a missed tick watchdog terminates the Worker, clears pending/busy state, and reports a recoverable timeout; added coverage that pause emits KEY_UP for every held key.
 - CI run [41844184415](https://github.com/bombless/caddy-webhook/actions/runs/41844184415) passed on commit `d8421747006c7ff7614a1db1d16e422cd6aca208` (syntax checks and all worker/player tests).
-- Lifecycle coverage is partial: pause/held-key cleanup and watchdog termination are covered; explicit resume/dispose lifecycle tests and browser Canvas tests remain outstanding.
+- Lifecycle unit coverage includes pause/held-key cleanup, resume, graceful/idempotent dispose, in-flight fetch cancellation, and watchdog termination; browser-level held-key and Canvas tests remain outstanding.
 
 ## Handoff / next session
 
@@ -183,3 +183,9 @@ CI validation (2026-11-04): initial runs [41841293121](https://github.com/bomble
 - The runtime rejects imported functions during the same preflight parse (and continues to reject imports through the WebAssembly module API) before any guest code is called.
 - Added a regression test that mutates the real valid WASM fixture's game_init type index while preserving the binary structure; the Worker must reject it with an ABI signature error.
 - Validation is pending the GitHub Actions run triggered by these commits. Browser Canvas tests, explicit resume coverage, and deterministic game-state replay remain outstanding.
+
+
+## Implementation progress (2026-11-04, player lifecycle)
+
+- Added a focused regression test proving resume restarts the fixed-step animation loop after pause, resets the accumulator, remains idempotent while running, and does not restart after disposal.
+- Existing unit coverage already exercises pause-generated KEY_UP events, bounded graceful disposal, idempotency, fetch cancellation, and watchdog termination. Real-browser focus/blur and held-key integration remain unverified.
