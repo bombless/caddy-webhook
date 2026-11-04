@@ -28,16 +28,16 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 
 - [x] Enforce package and manifest size limits before parsing or instantiating.
 - [x] Enforce WASM byte limits while streaming downloads; also enforce the limit when the response has no trustworthy `Content-Length`.
-- [ ] Validate manifest fields against the schema in the actual browser runtime (or document and implement the chosen validator strategy).
+- [x] Validate manifest fields against the schema in the actual browser runtime (or document and implement the chosen validator strategy).
 - [x] Validate package-relative paths: reject absolute paths, schemes, traversal segments, backslashes where unsafe, and malformed/encoded traversal.
 - [x] Resolve `entry` and assets relative to the package base URL without assuming the site's hostname or `/app/` mount path.
 - [x] Keep imports explicitly allowlisted; verify that WASI, network, filesystem, DOM, and other ambient capabilities cannot be imported.
 - [x] Verify memory limits against the actual instantiated memory, including modules that declare or grow memory unexpectedly.
 - [x] Bound every message, input queue, event queue, render payload, and host capability request.
-- [ ] Validate pointers, lengths, dimensions, multiplication/addition overflow, enum values, numeric finiteness, and guest return values at every boundary.
+- [x] Validate pointers, lengths, dimensions, multiplication/addition overflow, enum values, numeric finiteness, and guest return values at every boundary.
 - [ ] Define watchdog semantics and test that an unresponsive guest can be terminated without blocking the main thread.
 - [ ] Handle worker errors, traps, malformed messages, fetch failures, aborts, and disposal without leaking workers, listeners, object URLs, or animation callbacks.
-- [ ] Ensure pause, blur, visibility changes, and disposal clear held input and stop simulation.
+- [x] Ensure pause, blur, visibility changes, and disposal clear held input and stop simulation.
 - [ ] Add a user-visible recoverable error state; do not silently leave a blank or frozen player.
 - [ ] Document the security boundary accurately: worker isolation and capability restriction are fault containment, not a guarantee that arbitrary WASM is harmless.
 
