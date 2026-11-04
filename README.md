@@ -47,7 +47,7 @@ Game packages must remain outside `releases/` and outside `current`. The webhook
 
 ## Package contract
 
-Vue 3 and WASM use the same outer manifest fields: `manifestVersion`, `id`, `name`, `version`, `pluginType`, `entry`, and `runtime`.
+The shared schema is [schemas/game-plugin-manifest.schema.json](schemas/game-plugin-manifest.schema.json). Vue 3 and WASM use the same outer manifest fields: `manifestVersion`, `id`, `name`, `version`, `pluginType`, `entry`, and `runtime`.
 
 - Vue 3 packages declare `pluginType: "vue3"`, `entry: "index.html"`, `runtime.apiVersion: "1"`, a display object, and a capabilities array.
 - WASM packages declare `pluginType: "wasm"`, a package-relative `.wasm` entry, display width/height, capabilities, and the ABI v1 declaration documented in `wasm/schema/manifest.schema.json`.
@@ -67,7 +67,7 @@ The Caddy example is repository guidance only. It does not update a running Cadd
 - `.github/workflows/deploy.yml` builds/tests and publishes the platform shell to GitHub Pages only from `main`.
 - `.github/workflows/deploy-site.yml` is the whole-site webhook publisher targeting `POST /_deploy` with `DEPLOY_WEBHOOK_URL` and `DEPLOY_TOKEN` secrets.
 - `.github/workflows/publish-game.yml` is a manual package-publication workflow. It builds the Vue example package (or accepts a package directory), creates a ZIP with `manifest.json` at its root, and posts it to `/_deploy/game`.
-- The reusable whole-site deployment workflow remains available at `.github/workflows/deploy-static.yml`; its caller must continue to target `/_deploy`.
+- The reusable whole-site deployment workflow remains available at `.github/workflows/deploy-static.yml`; its caller must continue to target `/_deploy`. The package workflow's `build_example` input should be disabled when publishing an already-built custom/WASM package directory, so the platform build does not clear that directory.
 
 Configure `GAME_DEPLOY_WEBHOOK_URL` and `DEPLOY_TOKEN` as GitHub Actions secrets before running the package publication workflow. The URL secret must end in `/_deploy/game`. Never print or commit the token.
 
@@ -79,7 +79,7 @@ npm test
 npm run build
 ```
 
-## Server-agent handoff boundary
+See [the production webhook migration handoff](docs/deployment-webhook-handoff.md) for the exact endpoint, storage, Caddy, permissions, backup, rollout, and smoke-test contract.\n\n## Server-agent handoff boundary
 
 This repository change does **not** install or activate code on the production server. A separate agent must reconcile the deployed service with this source of truth.
 
