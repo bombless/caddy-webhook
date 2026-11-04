@@ -37,19 +37,40 @@ config/input scratch-buffer accessors. These reserved regions must not overlap
 the framebuffer or live game state. Config and input are UTF-8 JSON records.
 The framebuffer is RGBA8, top-left origin, tightly packed rows, straight alpha.
 
-The Worker rejects every import (including WASI), validates exports and guest
-memory ranges, and caps dimensions, memory pages, frame size, config and input
-buffers. The main thread owns input and Canvas; the Worker owns the instance.
-The main thread terminates the Worker on a missed watchdog deadline because a
-synchronous WASM call cannot be preempted from inside that Worker.
+The Worker rejects every import (including WASI), validates required exports
+and guest memory ranges, and caps dimensions, memory pages, frame size, config,
+input buffers, and queued input messages. The main thread owns input and Canvas;
+the Worker owns the instance. The main thread terminates the Worker on a missed
+per-tick watchdog deadline because a synchronous WASM call cannot be preempted
+from inside that Worker.
+
+ABI v1 requires the six lifecycle exports, exported linear memory named
+`memory`, and all dimension/framebuffer/config/input accessors declared in
+`abi/game.h`. Every accessor and lifecycle export is required. The guest owns
+its framebuffer and scratch buffers; the host writes length-delimited UTF-8
+JSON (no trailing NUL) into config/input scratch buffers. Input records use the
+documented KEY_* and POINTER_* JSON shapes. Rendering is tightly packed RGBA8,
+top-left origin, row stride `width * 4`, straight alpha. `game_render(ptr, cap)`
+must write exactly `width * height * 4` bytes and return that byte count.
+Lifecycle calls are legal only in READY, except ABI negotiation before init
+and shutdown after successful init. See the header for the complete return
+code and state contract.
+
+The player enforces a 64 KiB manifest limit and a 16 MiB module limit while
+streaming (even without Content-Length). Its runtime manifest checks mirror
+the checked-in schema's v1 constraints without loading a third-party validator.
+Package entry paths reject encoded paths and traversal, and are resolved
+relative to the package base URL. Memory is checked against the configured
+maximum after instantiation and after guest calls; all memory views are
+recreated from the current memory buffer after calls that may grow it.
 
 ## Limitations before production
 
 This is an initial runtime slice, not a security certification. Browser worker
 termination is the CPU watchdog boundary. A module can still consume its
 worker's CPU until termination. Capability events (audio/storage/score), formal
-JSON-schema validation in the player, cross-toolchain ABI conformance tests,
-and a full deterministic headless game harness remain follow-up work. Keep
+JSON-schema validation in the player, cross-toolchain ABI conformance tests, invalid WASM fixtures, browser Canvas
+tests, and a full deterministic headless game harness remain follow-up work. Keep
 capabilities disabled until host-side handlers and policy are implemented.
 
 Run the repository's normal static deployment after copying these files into
