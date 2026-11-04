@@ -86,15 +86,28 @@ async function loadRegistry() {
     if (value?.registryVersion !== 1 || !Array.isArray(value.games)) {
       throw new Error('Unsupported or invalid game registry schema')
     }
-    const validGames = value.games.filter(game =>
-      game && typeof game.id === 'string' &&
-      /^[a-z0-9][a-z0-9-]{0,63}$/.test(game.id) &&
-      typeof game.name === 'string' &&
-      (game.pluginType === 'vue3' || game.pluginType === 'wasm') &&
-      typeof game.latestVersion === 'string' &&
-      typeof game.manifestUrl === 'string' &&
-      Array.isArray(game.versions)
-    )
+    const validGames = value.games.filter(game => {
+      if (!game || typeof game.id !== 'string' ||
+          !/^[a-z0-9][a-z0-9-]{0,63}$/.test(game.id) ||
+          typeof game.name !== 'string' ||
+          (game.pluginType !== 'vue3' && game.pluginType !== 'wasm') ||
+          typeof game.latestVersion !== 'string' ||
+          !/^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(game.latestVersion) ||
+          typeof game.manifestUrl !== 'string' || !Array.isArray(game.versions)) return false
+      try {
+        const latest = new URL(game.manifestUrl, window.location.href)
+        if (latest.origin !== window.location.origin ||
+            latest.pathname !== `/games/${game.id}/${game.latestVersion}/manifest.json`) return false
+        return game.versions.every(version => {
+          if (!version || typeof version.version !== 'string' || typeof version.manifestUrl !== 'string') return false
+          const url = new URL(version.manifestUrl, window.location.href)
+          return url.origin === window.location.origin &&
+            url.pathname === `/games/${game.id}/${version.version}/manifest.json`
+        })
+      } catch {
+        return false
+      }
+    })
     registry.value = { registryVersion: 1, games: validGames }
     const requested = new URLSearchParams(location.search).get('game')
     selectedId.value = validGames.some(game => game.id === requested)
