@@ -176,3 +176,30 @@ test("real invalid WASM fixtures are rejected at the ABI boundary", async () => 
   await trap.send({ type: "TICK", dtMicros: 16667 });
   assert.equal(trap.messages.at(-1).type, "ERROR");
 });
+
+
+test("rejects unknown message types and unexpected top-level fields", async () => {
+  const unknown = harness();
+  await unknown.send({ type: "EXECUTE" });
+  assert.match(unknown.messages.at(-1).message, /unknown worker message type/);
+
+  const extraInit = harness();
+  await extraInit.send({ type: "INIT", bytes: validModule, config: {}, limits: { maxMemoryPages: 2, maxOutputBytes: 4096 }, host: true });
+  assert.match(extraInit.messages.at(-1).message, /malformed INIT/);
+
+  const extraInput = harness();
+  await extraInput.init();
+  await extraInput.send({ type: "INPUT", event: { type: "KEY_DOWN", code: "KeyW", modifiers: 0, timestamp_micros: 1 }, host: true });
+  assert.match(extraInput.messages.at(-1).message, /malformed INPUT/);
+});
+
+test("rejects malformed tick payloads and shutdown before initialization", async () => {
+  const tick = harness();
+  await tick.init();
+  await tick.send({ type: "TICK", dtMicros: 16667, elapsed: 1 });
+  assert.match(tick.messages.at(-1).message, /malformed TICK/);
+
+  const shutdown = harness();
+  await shutdown.send({ type: "SHUTDOWN" });
+  assert.match(shutdown.messages.at(-1).message, /shutdown before initialization/);
+});
