@@ -255,3 +255,12 @@ CI validation (2026-11-04): initial runs [41841293121](https://github.com/bomble
 - Pause now discards the incomplete fixed step without advancing simulation time; held-key release events use the timestamp of the last completed fixed update.
 - Added a regression test asserting the simulation clock and KEY_UP timestamp remain unchanged when pausing with a fractional accumulator remainder.
 - GitHub Actions/local test execution has not yet been verified for this commit; browser integration remains outstanding.
+
+
+## Implementation progress (2026-11-05, browser demo)
+
+- Added a browser-hosted Snake demo backed by a real ABI v1 WebAssembly guest, with the guest implemented in C and keyboard input delivered through the runtime's existing Worker protocol.
+- Added a responsive arcade page with canvas focus guidance, runtime status, pause/resume/restart controls, and a compact host event stream.
+- Added a GitHub Pages workflow that compiles `demo/game.c` with Clang/LLD, packages the page together with the existing runtime modules, and deploys on pushes to any branch.
+- CI exposed a stale pause test that expected discarded accumulator time to advance the simulation clock; updated that assertion to match the fixed-step pause semantics.
+- Browser smoke testing and Pages publication are pending successful Actions completion.
