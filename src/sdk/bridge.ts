@@ -74,7 +74,9 @@ export function createGameBridge() {
   const runtime: GameRuntime = {
     assets: { url: (path) => {
       if (typeof path !== 'string' || !path || path.startsWith('/') || path.includes('\\') || path.split('/').some(x => x === '..' || x === '.')) throw new Error('Asset path must be package-relative')
-      const resolved = new URL(path, packageBase)\n      if (resolved.origin !== packageBase.origin || !resolved.pathname.startsWith(packageBase.pathname)) throw new Error('Asset path escapes package')\n      return resolved.href
+      const resolved = new URL(path, packageBase)
+      if (resolved.origin !== packageBase.origin || !resolved.pathname.startsWith(packageBase.pathname)) throw new Error('Asset path escapes package')
+      return resolved.href
     } },
     audio: { play: async (soundId, options) => {
       if (!capabilities.has('audio')) return
