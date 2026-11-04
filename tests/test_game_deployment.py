@@ -52,7 +52,7 @@ class GameDeploymentTests(unittest.TestCase):
                 pass
 
             def log_error(self, fmt, *args):
-                print('HARNESS WEBHOOK ERROR:', fmt % args)
+                pass
 
             def log_message(self, fmt, *args):
                 pass
