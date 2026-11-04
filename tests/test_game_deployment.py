@@ -36,7 +36,12 @@ class GameDeploymentTests(unittest.TestCase):
 
     def request(self, method, path, body=None, headers=None):
         connection = http.client.HTTPConnection('127.0.0.1', self.port, timeout=5)
-        connection.request(method, path, body=body, headers=headers or {})
+        connection.putrequest(method, path)
+        for key, value in (headers or {}).items():
+            connection.putheader(key, value)
+        connection.endheaders()
+        if body:
+            connection.send(body)
         response = connection.getresponse()
         payload = response.read()
         result = (response.status, response.getheader('Content-Type'), json.loads(payload))
