@@ -92,10 +92,7 @@ export class WasmGamePlayer {
       this.pause(); this.worker?.terminate(); this.worker=null; this.pendingInputs=0; this._busy=false;
       this._reportError(Error("WASM worker failed"));
     };
-    this.worker.onmessageerror=()=>{
-      this.pause(); this.worker?.terminate(); this.worker=null; this.pendingInputs=0; this._busy=false;
-      this._reportError(Error("WASM worker message could not be decoded"));
-    };
+    this.worker.onmessageerror=()=>this._failWorker(Error("WASM worker message could not be decoded"));
     this.startedAt=performance.now();
     this._attachInput(); this.errorElement.hidden=true; this.resume(); return manifest;
     } catch(error) {
@@ -138,21 +135,41 @@ export class WasmGamePlayer {
     if(Object.keys(d).some(k=>!["width","height","pixelScale","orientation"].includes(k))) throw Error("unknown display field");
     if(Object.keys(w).some(k=>!["abi","abiVersion","maxMemoryPages","maxOutputBytes","renderMode"].includes(k))) throw Error("unknown WASM field");
   }
+  _failWorker(error) {
+    clearTimeout(this._watchdogTimer); this._watchdogTimer=null;
+    const worker=this.worker; this.worker=null;
+    if(worker) { worker.onmessage=null; worker.onerror=null; worker.onmessageerror=null; worker.terminate(); }
+    this.pendingInputs=0; this._busy=false;
+    this.pause(); this._reportError(error);
+  }
   _message(data) {
-    if(!data||typeof data!=="object"||typeof data.type!=="string"){this._reportError(Error("malformed worker message"));return;}
-    if(data.type==="INPUT_ACK"){this.pendingInputs=Math.max(0,this.pendingInputs-1);return;}
-    if(data.type==="ERROR"){
-      clearTimeout(this._watchdogTimer); this._watchdogTimer=null; this._busy=false;
-      this.pause();this.worker?.terminate();this.worker=null;this.pendingInputs=0;
-      this._reportError(new Error(data.message));return;
+    if(!data||typeof data!=="object"||Array.isArray(data)||typeof data.type!=="string") {
+      this._failWorker(Error("malformed worker message")); return;
+    }
+    if(data.type==="INPUT_ACK") {
+      if(Object.keys(data).length!==1||this.pendingInputs<1) {
+        this._failWorker(Error("invalid worker input acknowledgement")); return;
+      }
+      this.pendingInputs--; return;
+    }
+    if(data.type==="ERROR") {
+      if(Object.keys(data).some(key=>!["type","message"].includes(key))||typeof data.message!=="string"||!data.message.length||data.message.length>240) {
+        this._failWorker(Error("malformed worker error message")); return;
+      }
+      this._failWorker(Error(data.message)); return;
     }
     if(data.type==="FRAME") {
-      if(data.width!==this.width||data.height!==this.height||!(data.frame instanceof ArrayBuffer)||data.frame.byteLength!==this.width*this.height*4) {
-        this._reportError(Error("invalid framebuffer message from worker")); return;
+      if(Object.keys(data).length!==4||data.width!==this.width||data.height!==this.height||
+        !(data.frame instanceof ArrayBuffer)||data.frame.byteLength!==this.width*this.height*4) {
+        this._failWorker(Error("invalid framebuffer message from worker")); return;
       }
       clearTimeout(this._watchdogTimer); this._watchdogTimer=null; this._busy=false;
-      this.ctx.putImageData(new ImageData(new Uint8ClampedArray(data.frame),this.width,this.height),0,0);
+      try {
+        this.ctx.putImageData(new ImageData(new Uint8ClampedArray(data.frame),this.width,this.height),0,0);
+      } catch(error) { this._failWorker(error); }
+      return;
     }
+    this._failWorker(Error("unknown worker message type"));
   }
   _attachInput() {
     if(this._inputAttached)return; this._inputAttached=true;
