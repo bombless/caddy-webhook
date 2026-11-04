@@ -55,7 +55,9 @@ def _version_parts(value):
     if not match:
         raise InvalidArchiveError('version must be semantic version')
     major, minor, patch, prerelease, build = match.groups()
-    if build is not None and any(not part for part in build.split('.')):\n        raise InvalidArchiveError('invalid semantic version build metadata')\n    pre = None\n    if prerelease is not None:
+    if build is not None and any(not part for part in build.split('.')):
+        raise InvalidArchiveError('invalid semantic version build metadata')
+    pre = None\n    if prerelease is not None:
         identifiers = prerelease.split('.')
         if any(not part for part in identifiers):
             raise InvalidArchiveError('invalid semantic version prerelease')
