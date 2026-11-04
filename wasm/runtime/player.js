@@ -1,4 +1,4 @@
-const DEFAULTS = { maxModuleBytes: 16*1024*1024, maxMemoryPages: 256, maxOutputBytes: 4*1024*1024, watchdogMs: 1000, maxQueue: 128, renderHz: 30 };
+const DEFAULTS = { grantedCapabilities: [], maxModuleBytes: 16*1024*1024, maxMemoryPages: 256, maxOutputBytes: 4*1024*1024, watchdogMs: 1000, maxQueue: 128, renderHz: 30 };
 const IMPLEMENTED_CAPABILITIES = new Set(["input.keyboard", "input.pointer"]);
 const KEY_CODES = new Set(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","Space","Enter","Escape"]);
 const safePath = p => {
