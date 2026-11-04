@@ -36,7 +36,6 @@ class GameDeploymentTests(unittest.TestCase):
                 self.headers['Content-Length'] = request_headers.get(
                     'Content-Length', str(len(request_body))
                 )
-                print('HARNESS body len:', len(request_body), 'content length:', self.headers.get('Content-Length'))
                 self.rfile = io.BytesIO(request_body)
                 self.wfile = io.BytesIO()
                 self.client_address = ('127.0.0.1', 0)
