@@ -5,7 +5,7 @@ const safePath = p => typeof p==="string" && p.length<=240 && !p.startsWith("/")
 export class WasmGamePlayer {
   constructor(canvas, options={}) {
     if(!(canvas instanceof HTMLCanvasElement)) throw new TypeError("canvas required");
-    this.canvas=canvas; this.options={...DEFAULTS,...options}; this.queue=[]; this.held=new Set(); this.running=false; this.disposed=false; this.last=0; this.acc=0; this.step=1/60; this.worker=null;
+    this.canvas=canvas; this.options={...DEFAULTS,...options}; this.inputWindowStart=0; this.inputCount=0; this.lastPointerMove=0; this.held=new Set(); this.running=false; this.disposed=false; this.last=0; this.acc=0; this.step=1/60; this.worker=null;
     this.ctx=canvas.getContext("2d",{alpha:false}); if(!this.ctx) throw Error("2D canvas unavailable");
     this._key=e=>this._keyEvent(e); this._pointer=e=>this._pointerEvent(e);
     this._blur=()=>this._clearInput(); this._visibility=()=>{if(document.hidden)this.pause();};
@@ -20,9 +20,15 @@ export class WasmGamePlayer {
     if(wasmUrl.origin!==base.origin || !wasmUrl.pathname.startsWith(base.pathname)) throw Error("entry escapes package root");
     const response=await fetch(wasmUrl,{credentials:"omit",redirect:"error"});
     if(!response.ok) throw Error("WASM fetch failed: "+response.status);
-    const bytes=await response.arrayBuffer();
     const caps=manifest.runtime.wasm;
-    if(bytes.byteLength===0||bytes.byteLength>this.options.maxModuleBytes) throw Error("WASM module size limit exceeded");
+    const declared=Number(response.headers.get("content-length")||0);
+    if(declared>this.options.maxModuleBytes) throw Error("WASM module size limit exceeded");
+    const reader=response.body?.getReader();
+    if(!reader) throw Error("streaming response body required");
+    const chunks=[]; let total=0;
+    for(;;){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>this.options.maxModuleBytes){await reader.cancel();throw Error("WASM module size limit exceeded");}chunks.push(value);}
+    if(!total) throw Error("empty WASM module");
+    const bytes=new Uint8Array(total);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
     this.manifest=manifest; this.width=manifest.runtime.display.width; this.height=manifest.runtime.display.height;
     this.canvas.width=this.width; this.canvas.height=this.height;
     this.worker=new Worker(new URL("./worker.js",import.meta.url),{type:"module",name:"bombless-wasm-game"});
@@ -68,13 +74,16 @@ export class WasmGamePlayer {
   }
   _pointerEvent(e) {
     if(!this.manifest.runtime.capabilities.includes("input.pointer")) return;
+    const now=performance.now(); if(e.type==="pointermove" && now-this.lastPointerMove<16)return; if(e.type==="pointermove")this.lastPointerMove=now;
     const r=this.canvas.getBoundingClientRect(),x=(e.clientX-r.left)*this.width/r.width,y=(e.clientY-r.top)*this.height/r.height;
     const type={pointerdown:"POINTER_DOWN",pointerup:"POINTER_UP",pointermove:"POINTER_MOVE",pointercancel:"POINTER_CANCEL"}[e.type];
     if(type!=="POINTER_MOVE" && this.canvas.setPointerCapture && e.type==="pointerdown") this.canvas.setPointerCapture(e.pointerId);
     this._send({type,x:Math.max(0,Math.min(this.width,x)),y:Math.max(0,Math.min(this.height,y)),code:e.button,buttons:e.buttons,modifiers:(e.shiftKey?1:0)|(e.ctrlKey?2:0)|(e.altKey?4:0),timestamp_micros:Math.round(performance.now()*1000)});
   }
   _send(event) {
-    if(!this.worker||this.queue.length>=this.options.maxQueue)return;
+    if(!this.worker)return;
+    const now=performance.now(); if(now-this.inputWindowStart>=1000){this.inputWindowStart=now;this.inputCount=0;}
+    if(this.inputCount>=128)return; this.inputCount++;
     this.worker.postMessage({type:"INPUT",event});
   }
   _clearInput() { for(const code of this.held)this._send({type:"KEY_UP",code,modifiers:0,timestamp_micros:Math.round(performance.now()*1000)});this.held.clear(); }
@@ -83,14 +92,12 @@ export class WasmGamePlayer {
   _tick(now) {
     if(!this.running)return;
     const elapsed=Math.min((now-this.last)/1000,0.1);this.last=now;this.acc+=elapsed;
-    let ticks=0;
-    while(this.acc>=this.step&&ticks<5){this._timedPost({type:"TICK",dtMicros:16667});this.acc-=this.step;ticks++;}
+    if(this.acc>=this.step&&!this._busy){this._timedPost({type:"TICK",dtMicros:16667});this.acc-=this.step;}
     this._raf=requestAnimationFrame(t=>this._tick(t));
   }
   _timedPost(message) {
     if(this._busy)return;this._busy=true;
     const timer=setTimeout(()=>{this.pause();this.worker?.terminate();this.worker=null;this.options.onError?.(Error("WASM watchdog timeout"));},this.options.watchdogMs);
-    const previous=this.worker.onmessage;
     this.worker.onmessage=e=>{clearTimeout(timer);this._busy=false;this._message(e.data);};
     this.worker.postMessage(message);
   }
