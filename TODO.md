@@ -38,7 +38,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - [x] Define tick-scoped watchdog semantics; worker termination is implemented. (Automated timeout/termination coverage remains in the test section.)
 - [ ] Finish auditing and testing cleanup/error paths for worker errors, traps, malformed messages, fetch failures, aborts, and disposal; verify no workers, listeners, object URLs, or animation callbacks leak.
 - [x] Ensure pause, blur, visibility changes, and disposal clear held input and stop simulation.
-- [ ] Add a user-visible recoverable error state; do not silently leave a blank or frozen player.
+- [x] Add a user-visible recoverable error state; do not silently leave a blank or frozen player.
 - [x] Document the security boundary accurately: worker isolation and capability restriction are fault containment, not a guarantee that arbitrary WASM is harmless.
 
 ## P0 — Automated ABI and runtime tests
@@ -49,7 +49,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - [x] Add tests for module/package size limits, memory limits, and output bounds (streaming reader and manifest/runtime bounds; worker memory/output fixtures already cover the guest boundary).
 - [x] Add tests for worker message validation and malformed payloads.
 - [x] Add tests for watchdog timeout and worker termination.
-- [ ] Add tests for pause/resume/dispose and held-key cleanup.
+- [ ] Add tests for resume/dispose lifecycle and end-to-end held-key cleanup.
 - [ ] Add browser tests that instantiate a real module and verify Canvas output.
 - [ ] Add a deterministic headless harness that supplies exact input events and fixed update ticks, then asserts known state/render results.
 - [ ] Run the tests in CI and document supported browsers and required test tooling.
@@ -146,7 +146,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 
 Current working branch: `feat/wasm-plugin-runtime`.
 
-Latest branch HEAD before this TODO refresh: `b92dde98b4e24841dd5ef8245a16343824356f2e`. Relevant implementation commits: `d9c4a986` fixes numeric ABI value validation; `2dff6cf` adds recoverable error UI and failed-load cleanup; `e3dfbbc` hardens listener cleanup and worker-message validation; `ff4bbc9` adds a real valid ABI fixture and smoke test; `7eda64f` adds real invalid fixtures and rejection tests; `1c0e23f` corrects the invalid-pointer assertion to match the earlier numeric guard.
+Latest branch HEAD: `dca382505e40b72dcd4946faca7f18d6ba76787d`. Relevant implementation commits: `d9c4a986` fixes numeric ABI value validation; `2dff6cf` adds recoverable error UI and failed-load cleanup; `e3dfbbc` hardens listener cleanup and worker-message validation; `ff4bbc9` adds a real valid ABI fixture and smoke test; `7eda64f` adds real invalid fixtures and rejection tests; `1c0e23f` corrects the invalid-pointer assertion to match the earlier numeric guard.
 
 The ABI v1 contract, worker hardening, first recoverable error UI, and a real worker smoke/invalid-fixture suite are now implemented. CI passes, but **complete ABI conformance and browser rendering have not been validated**. Do not describe the runtime as production-ready. Next session should:
 
