@@ -23,3 +23,5 @@ footer span { margin-right: auto }
 .library button.selected { border-color: #8aa7e8; background: #25385e }
 .game-canvas { display: block; width: min(100%, 960px); height: auto; max-height: 100%; aspect-ratio: 16 / 9; object-fit: contain; outline: none }
 button:disabled { opacity: .45; cursor: not-allowed }
+
+.permission-row { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; color: #9aa8bf; font-size: 13px }
