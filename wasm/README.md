@@ -57,8 +57,10 @@ and shutdown after successful init. See the header for the complete return
 code and state contract.
 
 The player enforces a 64 KiB manifest limit and a 16 MiB module limit while
-streaming (even without Content-Length). Its runtime manifest checks mirror
-the checked-in schema's v1 constraints without loading a third-party validator.
+streaming (even without Content-Length). Its dependency-free runtime validator
+implements the checked-in v1 schema constraints, including required fields,
+types, enums, bounds, uniqueness, and rejection of unknown properties. Keep
+the schema and `_validateManifest()` in sync when changing the manifest.
 Package entry paths reject encoded paths and traversal, and are resolved
 relative to the package base URL. Memory is checked against the configured
 maximum after instantiation and after guest calls; all memory views are
@@ -66,9 +68,14 @@ recreated from the current memory buffer after calls that may grow it.
 
 ## Limitations before production
 
-This is an initial runtime slice, not a security certification. Browser worker
-termination is the CPU watchdog boundary. A module can still consume its
-worker's CPU until termination. Capability events (audio/storage/score), formal
+This is an initial runtime slice, not a security certification. Worker
+isolation and capability restriction provide fault containment, not a guarantee
+that arbitrary WASM is harmless. Browser worker termination is the CPU watchdog
+boundary. A synchronous guest call cannot be preempted; the main thread
+terminates the worker if initialization or a tick exceeds the configured
+watchdog deadline. Guest shutdown is acknowledged with a bounded 100 ms wait
+before forced termination. A module can still consume its worker's CPU until
+termination. Capability events (audio/storage/score), formal
 JSON-schema validation in the player, cross-toolchain ABI conformance tests, invalid WASM fixtures, browser Canvas
 tests, and a full deterministic headless game harness remain follow-up work. Keep
 capabilities disabled until host-side handlers and policy are implemented.
