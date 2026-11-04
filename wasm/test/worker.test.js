@@ -7,6 +7,8 @@ const workerSource = await readFile(new URL("../runtime/worker.js", import.meta.
 const validModule = Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0]).buffer;
 const realModuleBase64 = (await readFile(new URL("./fixtures/minimal-valid.wasm.b64", import.meta.url), "utf8")).trim();
 const realModule = Uint8Array.from(Buffer.from(realModuleBase64, "base64")).buffer;
+const invalidFixtures = JSON.parse(await readFile(new URL("./fixtures/invalid-fixtures.json", import.meta.url), "utf8"));
+const fixtureBytes = name => Uint8Array.from(Buffer.from(invalidFixtures[name], "base64")).buffer;
 
 function realHarness() {
   const messages = [];
@@ -136,4 +138,37 @@ test("real ABI v1 WASM fixture initializes, accepts input, renders RGBA, and shu
   assert.deepEqual([...new Uint8Array(h.messages[2].frame)], [255, 0, 0, 255]);
   await h.send({ type: "SHUTDOWN" });
   assert.equal(h.messages[3].type, "SHUTDOWN_ACK");
+});
+
+
+test("real invalid WASM fixtures are rejected at the ABI boundary", async () => {
+  const imported = realHarness();
+  await imported.init(fixtureBytes("invalid-import"));
+  assert.match(imported.messages.at(-1).message, /imports/);
+
+  const missing = realHarness();
+  await missing.init(fixtureBytes("missing-render"));
+  assert.match(missing.messages.at(-1).message, /missing export: game_render/);
+
+  const abi = realHarness();
+  await abi.init(fixtureBytes("invalid-version"));
+  assert.match(abi.messages.at(-1).message, /ABI version/);
+
+  const dimensions = realHarness();
+  await dimensions.init(fixtureBytes("invalid-dimensions"));
+  assert.match(dimensions.messages.at(-1).message, /dimensions/);
+
+  const pointer = realHarness();
+  await pointer.init(fixtureBytes("invalid-pointer"));
+  assert.match(pointer.messages.at(-1).message, /range/);
+
+  const memory = realHarness();
+  await memory.init(fixtureBytes("invalid-memory"));
+  assert.match(memory.messages.at(-1).message, /memory limit/);
+
+  const trap = realHarness();
+  await trap.init(fixtureBytes("invalid-trap"));
+  assert.equal(trap.messages.at(-1).type, "READY");
+  await trap.send({ type: "TICK", dtMicros: 16667 });
+  assert.equal(trap.messages.at(-1).type, "ERROR");
 });
