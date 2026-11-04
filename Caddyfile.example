@@ -18,6 +18,7 @@ handle /_games/registry.json {
 
 @game_packages path /games/*
 header @game_packages Access-Control-Allow-Origin "*"
+header @game_packages Cache-Control "public, max-age=31536000, immutable"
 header @game_packages X-Content-Type-Options "nosniff"
 
 handle_path /games/* {
