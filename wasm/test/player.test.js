@@ -3,6 +3,12 @@ import assert from "node:assert/strict";
 import { WasmGamePlayer, safePath, readLimited } from "../runtime/player.js";
 
 const player = Object.create(WasmGamePlayer.prototype);
+const DEFAULTS_FOR_TEST = {
+  maxModuleBytes: 1024, maxMemoryPages: 16, maxOutputBytes: 230400,
+  watchdogMs: 100, maxQueue: 128, renderHz: 30
+};
+
+
 const validManifest = () => ({
   manifestVersion: 1,
   id: "pixel-snake",
@@ -100,6 +106,61 @@ test("readLimited requires a streaming body", async () => {
     /streaming response body required/);
 });
 
+
+
+test("transfers the WebAssembly module ArrayBuffer during worker initialization", async () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  const canvas = {
+    tabIndex: 0,
+    addEventListener() {}, removeEventListener() {}, focus() {},
+    contains() { return false; }
+  };
+  const manifest = validManifest();
+  const wasmBytes = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
+  let initTransfer;
+  let rafCallback;
+  class FakeWorker {
+    postMessage(message, transfer) {
+      if (message.type === "INIT") {
+        initTransfer = transfer;
+        queueMicrotask(() => this.onmessage?.({ data: { type: "READY" } }));
+      }
+    }
+    terminate() {}
+  }
+  Object.assign(instance, {
+    canvas,
+    options: { ...DEFAULTS_FOR_TEST, grantedCapabilities: ["input.keyboard"], watchdogMs: 100 },
+    loading: false, disposed: false, worker: null, running: false,
+    held: new Set(), pendingInputs: 0, _busy: false, _inputAttached: false,
+    _watchdogTimer: null, simulationMicros: 0, acc: 0,
+    errorElement: { hidden: false },
+    _attachInput() {},
+    _detachInput() {},
+    resume() { this.running = true; },
+    _reportError(error) { throw error; }
+  });
+  const originals = {
+    fetch: globalThis.fetch, Worker: globalThis.Worker
+  };
+  globalThis.fetch = async url => String(url).endsWith("manifest.json")
+    ? new Response(JSON.stringify(manifest))
+    : new Response(wasmBytes);
+  globalThis.Worker = FakeWorker;
+  try {
+    await instance.load("https://example.test/games/snake/");
+    assert.ok(Array.isArray(initTransfer));
+    assert.equal(initTransfer.length, 1);
+    assert.ok(initTransfer[0] instanceof ArrayBuffer);
+    assert.equal(initTransfer[0].byteLength, wasmBytes.byteLength);
+  } finally {
+    globalThis.fetch = originals.fetch;
+    if (originals.Worker === undefined) delete globalThis.Worker;
+    else globalThis.Worker = originals.Worker;
+    instance.disposed = true;
+    instance.worker?.terminate();
+  }
+});
 
 test("watchdog timeout terminates the worker and reports a recoverable error", async () => {
   const instance = Object.create(WasmGamePlayer.prototype);
