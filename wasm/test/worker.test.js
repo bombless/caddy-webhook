@@ -8,7 +8,48 @@ const validModule = Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0]).buffer;
 const realModuleBase64 = (await readFile(new URL("./fixtures/minimal-valid.wasm.b64", import.meta.url), "utf8")).trim();
 const realModule = Uint8Array.from(Buffer.from(realModuleBase64, "base64")).buffer;
 const invalidFixtures = JSON.parse(await readFile(new URL("./fixtures/invalid-fixtures.json", import.meta.url), "utf8"));
-const fixtureBytes = name => Uint8Array.from(Buffer.from(invalidFixtures[name], "base64")).buffer;
+const fixtureBytes = name => Uint8Array.from(Buffer.from(invalidFixtures[name], "base64")).buffer;\n
+function wrongGameInitSignature(moduleBytes) {
+  const bytes = new Uint8Array(moduleBytes.slice(0));
+  const read = state => {
+    let value = 0, shift = 0, byte;
+    do { byte = bytes[state.offset++]; value |= (byte & 0x7f) << shift; shift += 7; } while (byte & 0x80);
+    return value >>> 0;
+  };
+  const name = state => {
+    const length = read(state);
+    const value = new TextDecoder().decode(bytes.subarray(state.offset, state.offset + length));
+    state.offset += length;
+    return value;
+  };
+  let functionSection = null, gameInitIndex = -1, section = 8;
+  while (section < bytes.length) {
+    const id = bytes[section++];
+    const state = { offset: section };
+    const size = read(state), end = state.offset + size;
+    if (id === 3) {
+      const count = read(state), entries = [];
+      for (let i = 0; i < count; i++) entries.push(state.offset), read(state);
+      functionSection = { entries };
+    } else if (id === 7) {
+      const count = read(state);
+      for (let i = 0; i < count; i++) {
+        const exportName = name(state), kind = bytes[state.offset++], index = read(state);
+        if (exportName === "game_init" && kind === 0) gameInitIndex = index;
+      }
+    }
+    section = end;
+  }
+  assert.ok(functionSection);
+  assert.ok(gameInitIndex >= 0);
+  // A valid ABI module has at least one alternate function type. Point
+  // game_init at type zero while retaining the original section encoding.
+  const typeEntryOffset = functionSection.entries[gameInitIndex];
+  assert.notEqual(bytes[typeEntryOffset], 0);
+  bytes[typeEntryOffset] = 0;
+  return bytes.buffer;
+}
+
 
 function realHarness() {
   const messages = [];
@@ -202,4 +243,11 @@ test("rejects malformed tick payloads and shutdown before initialization", async
   const shutdown = harness();
   await shutdown.send({ type: "SHUTDOWN" });
   assert.match(shutdown.messages.at(-1).message, /shutdown before initialization/);
+});
+
+test("rejects a real module whose game_init export has the wrong WASM signature", async () => {
+  const h = realHarness();
+  await h.init(wrongGameInitSignature(realModule));
+  assert.equal(h.messages.at(-1).type, "ERROR");
+  assert.match(h.messages.at(-1).message, /invalid ABI signature: game_init/);
 });
