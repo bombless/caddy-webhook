@@ -1,0 +1,9 @@
+# Merge these handlers into the existing site block.
+# Keep the existing reverse_proxy handler as the fallback.
+handle /_deploy {
+    reverse_proxy 127.0.0.1:8765
+}
+handle_path /app/* {
+    root * /var/lib/static-deploy/current
+    file_server
+}
