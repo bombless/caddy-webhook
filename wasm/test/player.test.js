@@ -129,3 +129,60 @@ test("pause sends key-up events for every held key", () => {
   assert.deepEqual(sent.map(message => message.event.code), ["KeyW", "ArrowLeft"]);
   assert.equal(instance.held.size, 0);
 });
+
+
+test("dispose aborts an in-flight package fetch without surfacing a stale error", async () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  Object.assign(instance, {
+    disposed: false, loading: false, worker: null, running: false, held: new Set(),
+    pendingInputs: 0, _busy: false, _watchdogTimer: null, _inputAttached: false,
+    _lastLoad: null, _loadController: null, errorElement: { remove() {} },
+    options: {}, _reportError: () => assert.fail("disposed load must not report a UI error")
+  });
+  let observedSignal;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (_url, options) => new Promise((_resolve, reject) => {
+    observedSignal = options.signal;
+    options.signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+  });
+  try {
+    const loading = instance.load("https://example.test/games/snake/");
+    await Promise.resolve();
+    assert.ok(observedSignal);
+    await instance.dispose();
+    await assert.rejects(loading, error => error.name === "AbortError");
+    assert.equal(observedSignal.aborted, true);
+    assert.equal(instance._loadController, null);
+    assert.equal(instance.worker, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("dispose performs bounded worker shutdown and is idempotent", async () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  let terminated = 0;
+  let shutdowns = 0;
+  const listeners = new Set();
+  const worker = {
+    postMessage(message) {
+      if (message.type === "SHUTDOWN") {
+        shutdowns++;
+        for (const listener of listeners) listener({ data: { type: "SHUTDOWN_ACK" } });
+      }
+    },
+    addEventListener(type, listener) { if (type === "message") listeners.add(listener); },
+    terminate() { terminated++; }
+  };
+  Object.assign(instance, {
+    disposed: false, running: false, held: new Set(), worker, pendingInputs: 0,
+    _busy: false, _watchdogTimer: null, _inputAttached: false,
+    _loadController: null, errorElement: { remove() {} }, options: {}
+  });
+  await instance.dispose();
+  await instance.dispose();
+  assert.equal(shutdowns, 1);
+  assert.equal(terminated, 1);
+  assert.equal(instance.worker, null);
+  assert.equal(instance.disposed, true);
+});
