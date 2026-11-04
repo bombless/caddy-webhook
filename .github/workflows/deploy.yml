@@ -1,4 +1,4 @@
-name: Build and deploy
+name: Build and deploy to GitHub Pages
 on:
   push:
     branches: ['**']
@@ -44,28 +44,12 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
+          # A rerun retains artifacts from earlier attempts. Scope the Pages
+          # artifact to this run attempt so deploy-pages finds exactly one.
+          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
           path: dist
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
-  deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
         with:
-          name: static-site
-          path: site
-      - name: Package and deploy
-        env:
-          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
-        run: |
-          cd site
-          zip -qr ../site.zip .
-          curl --fail-with-body --show-error --silent \
-            -X POST 'https://bombless.duckdns.org/_deploy' \
-            -H "Authorization: Bearer ${DEPLOY_TOKEN}" \
-            -H 'Content-Type: application/zip' \
-            --data-binary @../site.zip
+          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
