@@ -82,13 +82,14 @@ __attribute__((export_name("game_update"))) int game_update(u32 dt){
   return 0;
 }
 __attribute__((export_name("game_input"))) int game_input(u32 ptr,u32 len){
-  if(over||ptr+len>sizeof(input_buf)) return 0;
-  if(!contains(input_buf+ptr,len,"KEY_DOWN")) return 0;
+  if(over||ptr!=(u32)(unsigned long)input_buf||len>sizeof(input_buf)) return 0;
+  const u8 *event=(const u8 *)(unsigned long)ptr;
+  if(!contains(event,len,"KEY_DOWN")) return 0;
   int ndx=dx,ndy=dy;
-  if(contains(input_buf+ptr,len,"ArrowUp")||contains(input_buf+ptr,len,"KeyW")){ndx=0;ndy=-1;}
-  else if(contains(input_buf+ptr,len,"ArrowDown")||contains(input_buf+ptr,len,"KeyS")){ndx=0;ndy=1;}
-  else if(contains(input_buf+ptr,len,"ArrowLeft")||contains(input_buf+ptr,len,"KeyA")){ndx=-1;ndy=0;}
-  else if(contains(input_buf+ptr,len,"ArrowRight")||contains(input_buf+ptr,len,"KeyD")){ndx=1;ndy=0;}
+  if(contains(event,len,"ArrowUp")||contains(event,len,"KeyW")){ndx=0;ndy=-1;}
+  else if(contains(event,len,"ArrowDown")||contains(event,len,"KeyS")){ndx=0;ndy=1;}
+  else if(contains(event,len,"ArrowLeft")||contains(event,len,"KeyA")){ndx=-1;ndy=0;}
+  else if(contains(event,len,"ArrowRight")||contains(event,len,"KeyD")){ndx=1;ndy=0;}
   if(ndx!=-dx||ndy!=-dy){dx=ndx;dy=ndy;}
   return 0;
 }
