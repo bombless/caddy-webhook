@@ -74,7 +74,7 @@ def _compare_versions(left, right):
         if a[index] != b[index]:
             return -1 if a[index] < b[index] else 1
     if a[3] == b[3]:
-        return 0
+        return (left > right) - (left < right)
     if a[3] is None:
         return 1
     if b[3] is None:
