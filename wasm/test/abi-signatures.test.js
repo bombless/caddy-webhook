@@ -26,9 +26,19 @@ function readU32(bytes, state) {
   return value >>> 0;
 }
 
+const expectedSignatures = {
+  game_abi_version: [0, 1], game_init: [2, 1], game_update: [1, 1],
+  game_input: [2, 1], game_render: [2, 1], game_shutdown: [0, 0],
+  game_get_width: [0, 1], game_get_height: [0, 1],
+  game_get_render_buffer_ptr: [0, 1], game_get_render_buffer_len: [0, 1],
+  game_get_config_buffer_ptr: [0, 1], game_get_config_buffer_capacity: [0, 1],
+  game_get_input_buffer_ptr: [0, 1], game_get_input_buffer_capacity: [0, 1]
+};
+
 function wrongExportSignature(moduleBytes, target) {
   const bytes = new Uint8Array(moduleBytes);
   let functionTypeOffsets = [];
+  const types = [];
   const exports = new Map();
   const readName = state => {
     const length = readU32(bytes, state);
@@ -46,7 +56,19 @@ function wrongExportSignature(moduleBytes, target) {
     const size = readU32(bytes, state);
     const end = state.offset + size;
     assert.ok(end <= bytes.length, "truncated section");
-    if (id === 3) {
+    if (id === 1) {
+      const count = readU32(bytes, state);
+      for (let i = 0; i < count; i++) {
+        assert.equal(bytes[state.offset++], 0x60, "expected function type");
+        const paramCount = readU32(bytes, state);
+        const params = bytes.slice(state.offset, state.offset + paramCount);
+        state.offset += paramCount;
+        const resultCount = readU32(bytes, state);
+        const results = bytes.slice(state.offset, state.offset + resultCount);
+        state.offset += resultCount;
+        types.push({ params: params.length, results: results.length });
+      }
+    } else if (id === 3) {
       const count = readU32(bytes, state);
       functionTypeOffsets = [];
       for (let i = 0; i < count; i++) {
@@ -70,10 +92,13 @@ function wrongExportSignature(moduleBytes, target) {
   assert.equal(item.kind, 0, `${target} must be a function export`);
   const typeOffset = functionTypeOffsets[item.index];
   assert.notEqual(typeOffset, undefined, `${target} must reference a defined function`);
-  // A one-byte out-of-range type index is caught by the runtime's ABI
-  // signature preflight before WebAssembly.compile/instantiate is reached.
-  assert.ok(bytes[typeOffset] < 0x80, "fixture type index must use one-byte LEB128");
-  bytes[typeOffset] = 0x7f;
+  const expected = expectedSignatures[target];
+  const wrongType = types.findIndex(type =>
+    type.params !== expected[0] || type.results !== expected[1]
+  );
+  assert.notEqual(wrongType, -1, `fixture needs an incompatible function type for ${target}`);
+  assert.ok(wrongType < 0x80, "fixture type index must use one-byte LEB128");
+  bytes[typeOffset] = wrongType;
   return bytes.buffer;
 }
 
