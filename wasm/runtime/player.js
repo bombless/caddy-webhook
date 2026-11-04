@@ -205,3 +205,5 @@ export class WasmGamePlayer {
     }
   }
 }
+
+export { safePath, readLimited };
