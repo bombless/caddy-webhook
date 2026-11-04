@@ -19,6 +19,19 @@ function dimensions() {
   if(!width||!height||width>1024||height>1024||!Number.isSafeInteger(bytes)||bytes>limits.maxOutputBytes) throw Error("invalid framebuffer dimensions/size");
   return {width,height,bytes};
 }
+function validateEvent(e) {
+  const keyTypes=new Set(["KEY_DOWN","KEY_UP"]), pointerTypes=new Set(["POINTER_DOWN","POINTER_UP","POINTER_MOVE","POINTER_CANCEL"]);
+  const integer=(v,min,max)=>Number.isSafeInteger(v)&&v>=min&&v<=max;
+  if(typeof e.type!=="string" || !integer(e.timestamp_micros,0,Number.MAX_SAFE_INTEGER) || !integer(e.modifiers,0,15)) throw Error("invalid input event metadata");
+  if(keyTypes.has(e.type)) {
+    if(Object.keys(e).some(k=>!["type","code","modifiers","timestamp_micros"].includes(k)) ||
+       !["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","Space","Enter","Escape"].includes(e.code)) throw Error("invalid keyboard event");
+  } else if(pointerTypes.has(e.type)) {
+    if(Object.keys(e).some(k=>!["type","x","y","code","buttons","modifiers","timestamp_micros"].includes(k)) ||
+       !Number.isFinite(e.x)||!Number.isFinite(e.y)||e.x<0||e.y<0||e.x>1024||e.y>1024||
+       !integer(e.code,-1,31)||!integer(e.buttons,0,31)) throw Error("invalid pointer event");
+  } else throw Error("unknown input event type");
+}
 onmessage = async ({data}) => {
   try {
     if(!data || typeof data!=="object" || typeof data.type!=="string") throw Error("malformed worker message");
@@ -40,19 +53,22 @@ onmessage = async ({data}) => {
       if(bytes.length>64*1024) throw Error("config exceeds host limit");
       const cp=u32(ex.game_get_config_buffer_ptr()),cc=u32(ex.game_get_config_buffer_capacity());
       if(cc>64*1024 || bytes.length>cc) throw Error("config exceeds guest buffer/limit");
+      range(cp,cc);
       new Uint8Array(memory.buffer,range(cp,bytes.length),bytes.length).set(bytes);
       status(ex.game_init(cp,bytes.length),"game_init");
       const d=dimensions();
       if(d.width!==config.runtime.display.width||d.height!==config.runtime.display.height) throw Error("manifest/framebuffer dimensions differ");
       const rp=u32(ex.game_get_render_buffer_ptr()),rl=u32(ex.game_get_render_buffer_len());
       if(rl<d.bytes) throw Error("render buffer too small");
-      range(rp,d.bytes);
+      range(rp,rl);
       postMessage({type:"READY",width:d.width,height:d.height});
     } else if(data.type==="INPUT" && !stopped) {
       if(!data.event || typeof data.event!=="object" || Array.isArray(data.event)) throw Error("malformed input event");
+      validateEvent(data.event);
       const bytes=new TextEncoder().encode(JSON.stringify(data.event));
       const p=u32(ex.game_get_input_buffer_ptr()),cap=u32(ex.game_get_input_buffer_capacity());
       if(cap>4096 || bytes.length>cap) throw Error("input event exceeds guest buffer/limit");
+      range(p,cap);
       new Uint8Array(memory.buffer,range(p,bytes.length),bytes.length).set(bytes);
       status(ex.game_input(p,bytes.length),"game_input");
       postMessage({type:"INPUT_ACK"});
@@ -61,7 +77,7 @@ onmessage = async ({data}) => {
       status(ex.game_update(data.dtMicros),"game_update");
       const d=dimensions(),ptr=u32(ex.game_get_render_buffer_ptr()),len=u32(ex.game_get_render_buffer_len());
       if(len<d.bytes) throw Error("render buffer too small");
-      range(ptr,d.bytes);
+      range(ptr,len);
       const rendered=ex.game_render(ptr,d.bytes); checkMemory();
       if(rendered!==d.bytes) throw Error("game_render returned unexpected byte count");
       const frame=new Uint8Array(d.bytes); frame.set(new Uint8Array(memory.buffer,ptr,d.bytes));
