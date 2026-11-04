@@ -7,6 +7,7 @@ import tempfile
 import threading
 import unittest
 import zipfile
+from unittest import mock
 from concurrent.futures import ThreadPoolExecutor
 
 import sys
@@ -186,6 +187,68 @@ class GameDeploymentTests(unittest.TestCase):
         _status, _ctype, registry = self.request('GET', '/_games/registry.json')
         self.assertEqual(len(registry['games']), 1)
         self.assertEqual(len(registry['games'][0]['versions']), 1)
+
+
+    def test_missing_or_malformed_manifest_and_unsupported_contract_are_rejected(self):
+        missing = self.archive(None, {'index.html': 'not a package'})
+        self.assertEqual(self.post('/_deploy/game', missing)[0], 400)
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w') as z:
+            z.writestr('manifest.json', '{broken json')
+            z.writestr('index.html', 'x')
+        self.assertEqual(self.post('/_deploy/game', buffer.getvalue())[0], 400)
+
+        unsupported = self.vue_manifest('future-game')
+        unsupported['manifestVersion'] = 2
+        self.assertEqual(self.post('/_deploy/game', self.archive(unsupported, {'index.html': 'x'}))[0], 400)
+
+        unsupported = self.vue_manifest('future-runtime')
+        unsupported['pluginType'] = 'native'
+        self.assertEqual(self.post('/_deploy/game', self.archive(unsupported, {'index.html': 'x'}))[0], 400)
+
+    def test_absolute_and_symlink_zip_entries_are_rejected(self):
+        absolute = self.archive(self.vue_manifest('absolute-path'), {
+            'index.html': 'x', '/outside.txt': 'blocked'
+        })
+        self.assertEqual(self.post('/_deploy/game', absolute)[0], 400)
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w') as z:
+            z.writestr('manifest.json', json.dumps(self.vue_manifest('symlink-game')))
+            z.writestr('index.html', 'x')
+            info = zipfile.ZipInfo('link')
+            info.create_system = 3
+            info.external_attr = (stat.S_IFLNK | 0o777) << 16
+            z.writestr(info, 'index.html')
+        self.assertEqual(self.post('/_deploy/game', buffer.getvalue())[0], 400)
+
+    def test_archive_entry_expansion_and_upload_limits_are_enforced(self):
+        payload = self.archive(self.vue_manifest('many-files'), {'index.html': 'x', 'extra.txt': 'y'})
+        with mock.patch.object(webhook, 'MAX_ARCHIVE_FILES', 2):
+            self.assertEqual(self.post('/_deploy/game', payload)[0], 400)
+
+        payload = self.archive(self.vue_manifest('expanded'), {'index.html': 'larger'})
+        with mock.patch.object(webhook, 'MAX_UNCOMPRESSED_BYTES', 2):
+            self.assertEqual(self.post('/_deploy/game', payload)[0], 400)
+
+        status, _ctype, body = self.request('POST', '/_deploy/game', b'', {
+            'Authorization': 'Bearer test-token',
+            'Content-Type': 'application/zip',
+            'Content-Length': str(webhook.MAX_UPLOAD_BYTES + 1)
+        })
+        self.assertEqual((status, body), (413, {'error': 'invalid_size'}))
+
+    def test_registry_never_references_package_when_registry_commit_fails(self):
+        payload = self.archive(self.vue_manifest('orphan-game'), {'index.html': 'x'})
+        with mock.patch.object(webhook, '_write_registry', side_effect=OSError('simulated disk failure')):
+            status, _ctype, body = self.post('/_deploy/game', payload)
+        self.assertEqual((status, body), (500, {'error': 'internal_error'}))
+        self.assertTrue(os.path.isfile(os.path.join(
+            webhook.ROOT, 'games', 'orphan-game', '1.0.0', 'index.html')))
+        _status, _ctype, registry = self.request('GET', '/_games/registry.json')
+        self.assertEqual(registry['games'], [])
+
 
 
 if __name__ == '__main__':
