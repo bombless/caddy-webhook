@@ -48,7 +48,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - [x] Add tests for manifest validation and unsafe entry paths.
 - [x] Add tests for module/package size limits, memory limits, and output bounds (streaming reader and manifest/runtime bounds; worker memory/output fixtures already cover the guest boundary).
 - [x] Add tests for worker message validation and malformed payloads.
-- [ ] Add tests for watchdog timeout and worker termination.
+- [x] Add tests for watchdog timeout and worker termination.
 - [ ] Add tests for pause/resume/dispose and held-key cleanup.
 - [ ] Add browser tests that instantiate a real module and verify Canvas output.
 - [ ] Add a deterministic headless harness that supplies exact input events and fixed update ticks, then asserts known state/render results.
@@ -135,6 +135,12 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - Hardened the Worker message protocol: INIT, INPUT, TICK, and SHUTDOWN now reject unexpected top-level fields; INIT limits reject unexpected keys; config must be a non-array object; input/tick/shutdown require the appropriate initialized lifecycle state.
 - Added regression coverage for unknown message types, extra INIT/INPUT/TICK fields, and shutdown-before-initialization.
 - CI run [41844085548](https://github.com/bombless/caddy-webhook/actions/runs/41844085548) passed on commit `f11de5b3437b2d164b51eb2f59f9a6eaa79b5b92` (JavaScript syntax checks and worker ABI tests).
+
+## Implementation progress (2026-11-04, continued)
+
+- Added player-level regression tests proving a missed tick watchdog terminates the Worker, clears pending/busy state, and reports a recoverable timeout; added coverage that pause emits KEY_UP for every held key.
+- CI run [41844184415](https://github.com/bombless/caddy-webhook/actions/runs/41844184415) passed on commit `d8421747006c7ff7614a1db1d16e422cd6aca208` (syntax checks and all worker/player tests).
+- Lifecycle coverage is partial: pause/held-key cleanup and watchdog termination are covered; explicit resume/dispose lifecycle tests and browser Canvas tests remain outstanding.
 
 ## Handoff / next session
 
