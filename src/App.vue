@@ -92,7 +92,7 @@ async function loadRegistry() {
           typeof game.name !== 'string' ||
           (game.pluginType !== 'vue3' && game.pluginType !== 'wasm') ||
           typeof game.latestVersion !== 'string' ||
-          !/^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(game.latestVersion) ||
+          !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(game.latestVersion) ||
           typeof game.manifestUrl !== 'string' || !Array.isArray(game.versions)) return false
       try {
         const latest = new URL(game.manifestUrl, window.location.href)
