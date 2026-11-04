@@ -73,7 +73,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - [ ] Implement audio requests using only host-approved, manifest-declared sound IDs.
 - [ ] Implement namespaced, quota-limited storage with explicit asynchronous request/response semantics.
 - [ ] Define asset IDs/handles and resolve only manifest-declared package-relative resources.
-- [ ] Treat manifest capabilities as requests; require host policy to grant each capability.
+- [x] Treat manifest capabilities as requests; require host policy to grant each capability. The Player defaults to deny-all and currently permits explicit grants only for implemented keyboard/pointer input.
 - [ ] Add tests for unknown event types, malformed payloads, undeclared IDs, quota exhaustion, and event flooding.
 
 ## P1 — Cross-toolchain sample game
@@ -232,3 +232,11 @@ CI validation (2026-11-04): initial runs [41841293121](https://github.com/bomble
 - Added player timing coverage for two simulation steps per 30 FPS frame, a worker batch-range rejection test, and a deterministic headless replay test that supplies explicit input timestamps/fixed ticks and compares state-derived frame bytes across repeated runs. The replay uses controlled guest exports; it is not yet a deterministic replay of a checked-in sample game module.
 - The Worker queues input events and delivers them before the first fixed update at/after each simulation timestamp; paused wall time is excluded. This preserves short key transitions within batched ticks.
 - Local validation: `npm run check:wasm` passes; `npm run test:wasm` passes all 37 tests. Browser Canvas/focus testing and a public replay API remain outstanding.
+
+
+## Implementation progress (2026-11-05, host capability grants)
+
+- Manifest capability declarations are now treated as requests. The Player accepts an explicit `grantedCapabilities` host option, defaults to deny-all, and passes only the intersection of declared and host-granted capabilities into the runtime.
+- Only the implemented `input.keyboard` and `input.pointer` capabilities may currently be granted; unsupported audio/storage/score services remain disabled, and invalid host grant names are rejected.
+- Added regression coverage for deny-by-default, selective grants, and non-mutation of the parsed manifest. Updated the host integration documentation with the explicit grant policy.
+- Automated validation is pending the GitHub Actions run triggered by these commits.
