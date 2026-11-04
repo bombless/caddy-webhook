@@ -162,6 +162,10 @@ test("real invalid WASM fixtures are rejected at the ABI boundary", async () => 
   await pointer.init(fixtureBytes("invalid-pointer"));
   assert.match(pointer.messages.at(-1).message, /pointer/);
 
+  const output = realHarness();
+  await output.init(fixtureBytes("invalid-output"));
+  assert.match(output.messages.at(-1).message, /range/);
+
   const memory = realHarness();
   await memory.init(fixtureBytes("invalid-memory"));
   assert.match(memory.messages.at(-1).message, /memory limit/);
