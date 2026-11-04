@@ -123,23 +123,23 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - Added initial coverage for initialization, malformed messages/module bytes, import rejection, missing exports, ABI version rejection, framebuffer bounds, and malformed keyboard input.
 - Added `package.json` scripts (`npm run check:wasm`, `npm run test:wasm`) and a GitHub Actions workflow for syntax checks and worker tests.
 - Test limitation: the fixture is a minimal valid WASM container and the harness supplies mocked exports; this exercises worker-side validation and message handling, but does not yet prove real module export/signature conformance. Real valid/invalid ABI fixtures, manifest schema tests, resource-limit tests, watchdog/lifecycle coverage, and browser tests remain outstanding.
-- Tests have not yet been executed in this environment; CI results must be checked after this commit. Do not mark the P0 test section complete until the real fixtures and remaining coverage are added and passing.
+- Local tests have not been run in the editing environment. The first GitHub Actions run has now executed and failed; see the CI results below. Do not mark the P0 test section complete until the harness failures are fixed, real fixtures and remaining coverage are added, and CI passes.
 
 ## Handoff / next session
 
 Current working branch: `feat/wasm-plugin-runtime`.
 
-Latest known commit before this TODO refresh: `d2c0ef5adb1726362dfccd178c701cdcca937530`.
+Current branch HEAD at handoff: `6b707168ccc4cb4d55b26f48b2a94e395f1b4d3f` (`test: make worker assertions realm-independent`).
 
 The ABI v1 contract and the first round of loader/worker hardening are implemented, but **have not been validated by running tests or a browser**. Do not describe the runtime as production-ready. The next session should:
 
 1. Re-read this TODO and inspect the current branch before editing; the checklist is the source of truth.
 2. Add a minimal valid WASM fixture plus invalid fixtures, then implement runnable ABI/worker tests and CI (P0). Prefer tests that execute the actual `worker.js` logic rather than duplicating its validation rules.
-3. Run syntax checks and all available tests; fix issues found and record exact commands/results here.
+3. First fix the three observed CI failures. The syntax checks already pass; rerun `node --check wasm/runtime/player.js`, `node --check wasm/runtime/worker.js`, and `node --test wasm/test/*.test.js`, then confirm the PR workflow is green. Record exact commands/results here.
 4. Only then continue with the user-visible recoverable error state and the remaining lifecycle cleanup audit.
 5. Keep frontend integration explicitly blocked until the actual frontend source/repository and deployment workflow are identified; this repository currently appears to provide the webhook/static deployment side rather than the frontend shell.
 
-No automated tests, build, or browser validation have been run as part of the work recorded above.
+CI validation status at handoff (2026-11-04): both PR-triggered `wasm-runtime` runs failed at `Run worker ABI tests`; the JavaScript syntax-check step passed in both. In run [41841293121](https://github.com/bombless/caddy-webhook/actions/runs/41841293121), `node --test wasm/test/*.test.js` reported 5 tests: 2 passed, 3 failed. Failures: (1) `valid module initializes and produces a copied RGBA frame` expected `READY`, got `ERROR`; (2) unsupported ABI/dimensions test hit `fn is not a function` instead of the expected dimensions error; (3) out-of-bounds guest buffer/input test hit `fn is not a function` instead of the expected range error. The second run [41841284566](https://github.com/bombless/caddy-webhook/actions/runs/41841284566) also failed at the same test step. Inspect the full job logs before changing assertions: determine whether the fixture/mocks do not match the worker's actual ABI exports or whether the worker has a defect. Do not weaken assertions just to get green CI. No browser validation has been run.
 
 ## Suggested execution order
 
