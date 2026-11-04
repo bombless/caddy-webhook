@@ -55,6 +55,7 @@ onmessage = async ({data}) => {
       if(cap>4096 || bytes.length>cap) throw Error("input event exceeds guest buffer/limit");
       new Uint8Array(memory.buffer,range(p,bytes.length),bytes.length).set(bytes);
       status(ex.game_input(p,bytes.length),"game_input");
+      postMessage({type:"INPUT_ACK"});
     } else if(data.type==="TICK" && !stopped) {
       if(data.dtMicros!==16667) throw Error("invalid fixed timestep");
       status(ex.game_update(data.dtMicros),"game_update");
