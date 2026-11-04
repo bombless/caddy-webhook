@@ -215,3 +215,11 @@ CI validation (2026-11-04): initial runs [41841293121](https://github.com/bomble
 - Documented Pointer Events as the unified pointer/touch path, the bounded input overflow policy, and fixed-step timing behavior.
 - Added a regression test for unfocused-key passthrough, focused-key capture, focus-loss release, and pointer-to-focus behavior.
 - Local validation: `npm run check:wasm` and `npm run test:wasm` pass (25 tests). Browser-level focus/Canvas validation and deterministic game-state replay remain outstanding.
+
+
+## Implementation progress (2026-11-04, main-thread worker protocol audit)
+
+- Closed a lifecycle/error-path gap found during review: malformed, unknown, extra-field, and unsolicited worker messages now terminate the worker, clear watchdog/busy/input state, detach host input through the recoverable error path, and surface an error instead of leaving a worker running behind a blank/frozen player.
+- INPUT_ACK is accepted only when an input is outstanding; FRAME is accepted only as the response to an in-flight tick and only with the exact dimensions, byte length, and message shape. Canvas upload exceptions also enter the same cleanup path.
+- Added player regression tests for malformed messages, invalid acknowledgements, malformed frame buffers, unknown message types, unsolicited valid-looking frames, and cleanup of worker handlers/watchdog state.
+- Changes are committed on feat/wasm-plugin-runtime; CI validation for this batch is pending. This is a targeted audit improvement, not completion of the broader lifecycle audit or browser-level validation.
