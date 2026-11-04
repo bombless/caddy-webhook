@@ -45,8 +45,8 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 
 - [x] Add a minimal valid WASM fixture exporting the required ABI; the test harness instantiates it with the real WebAssembly engine and verifies input, RGBA output, and shutdown.
 - [x] Add invalid fixtures for missing exports, wrong ABI version, unexpected imports, over-limit memory, invalid pointers, oversized framebuffer, invalid dimensions, and trap-on-call.
-- [ ] Add tests for manifest validation and unsafe entry paths.
-- [ ] Add tests for module/package size limits, memory limits, and output bounds.
+- [x] Add tests for manifest validation and unsafe entry paths.
+- [x] Add tests for module/package size limits, memory limits, and output bounds (streaming reader and manifest/runtime bounds; worker memory/output fixtures already cover the guest boundary).
 - [ ] Add tests for worker message validation and malformed payloads.
 - [ ] Add tests for watchdog timeout and worker termination.
 - [ ] Add tests for pause/resume/dispose and held-key cleanup.
@@ -126,7 +126,9 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 - Fixed the worker's `u32` helper: call sites pass already-evaluated ABI values, so the helper validates a number rather than invoking it as a function. This was the common cause of all three initial CI failures.
 - Added an accessible player error surface (`role=alert`) with a retry action; load/fetch/manifest/worker failures now surface instead of leaving a blank canvas. Runtime failure cleanup detaches input listeners, clears watchdog state, stops animation, and terminates the worker. Malformed worker messages and invalid frame payloads are rejected.
 - Added a real ABI v1 WASM smoke fixture (C source plus base64 module) and real invalid-module fixtures. The worker tests now instantiate actual modules, verify input/RGBA frame/shutdown, and reject invalid imports, missing exports, wrong ABI version, bad dimensions/pointers, oversized framebuffer, over-limit memory, and traps. Mock-based boundary tests remain as additional coverage.
-- GitHub Actions passes on the current branch (7 test groups, including the real fixture corpus). Remaining P0 gaps include manifest/schema tests, module/package size limits, exact export signature conformance, watchdog/lifecycle tests, and browser Canvas tests.
+- Added `wasm/test/player.test.js` for manifest validation, safe/unsafe package entry paths, and streamed package/module size-limit behavior. Exported the small `safePath` and `readLimited` helpers for direct tests; the player’s existing `_validateManifest()` is exercised without constructing DOM state.
+- CI run [41843753939](https://github.com/bombless/caddy-webhook/actions/runs/41843753939) passed on commit `b3518eb76102dbb720c782aee6e0b5a953ca4ab6` (syntax checks and all worker + player tests).
+- GitHub Actions passes on the current branch (7 test groups, including the real fixture corpus). Remaining P0 gaps include exact WASM export-signature conformance, watchdog/lifecycle tests, browser Canvas tests, and the deterministic headless harness. Manifest/path and streaming-size helper tests are now covered; full JSON Schema conformance and end-to-end fetch integration are not yet proven.
 
 ## Handoff / next session
 
