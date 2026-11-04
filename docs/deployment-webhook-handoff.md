@@ -45,7 +45,7 @@ Registry schema:
 - `registryVersion: 1`
 - `games`: sorted by `id`
 - Each game has `id`, `name`, `pluginType`, `latestVersion`, `manifestUrl`, and `versions`
-- Each version has `version` and `manifestUrl`; versions are sorted by SemVer precedence
+- Each version has `version` and `manifestUrl`; versions are sorted by SemVer precedence, with lexical full-version tie-breaking for equal-precedence build-metadata variants
 - Package root URL: `/games/{id}/{version}/`
 - Manifest URL: `/games/{id}/{version}/manifest.json`
 
