@@ -126,6 +126,29 @@ test("watchdog timeout terminates the worker and reports a recoverable error", a
   assert.match(reported.message, /watchdog timeout/);
 });
 
+test("pause discards an incomplete fixed step without advancing simulation time", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  const sent = [];
+  Object.assign(instance, {
+    running: true, _raf: 1, acc: 0.0125, simulationMicros: 33334,
+    held: new Set(["KeyW"]), worker: { postMessage: message => sent.push(message) },
+    pendingInputs: 0, options: { maxQueue: 128 }, inputWindowStart: 0, inputCount: 0
+  });
+  const originalCancel = globalThis.cancelAnimationFrame;
+  globalThis.cancelAnimationFrame = () => {};
+  try {
+    instance.pause();
+  } finally {
+    if (originalCancel === undefined) delete globalThis.cancelAnimationFrame;
+    else globalThis.cancelAnimationFrame = originalCancel;
+  }
+  assert.equal(instance.simulationMicros, 33334,
+    "unexecuted accumulator time must not enter the deterministic simulation clock");
+  assert.equal(instance.acc, 0);
+  assert.equal(sent[0].event.timestamp_micros, 33334,
+    "release events must use the last completed fixed-step timestamp");
+});
+
 test("pause sends key-up events for every held key", () => {
   const instance = Object.create(WasmGamePlayer.prototype);
   const sent = [];
