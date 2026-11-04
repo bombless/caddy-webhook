@@ -1,13 +1,12 @@
-import http.client
 import io
 import json
 import os
 import stat
 import tempfile
-import threading
 import unittest
 import zipfile
 from unittest import mock
+from email.message import Message
 from concurrent.futures import ThreadPoolExecutor
 
 import sys
@@ -23,27 +22,56 @@ class GameDeploymentTests(unittest.TestCase):
         webhook.TOKEN = 'test-token'
         for name in ('tmp', 'releases', 'games'):
             os.makedirs(os.path.join(webhook.ROOT, name))
-        self.server = webhook.Server(('127.0.0.1', 0), webhook.Handler)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
-        self.thread.start()
-        self.port = self.server.server_address[1]
-
     def tearDown(self):
-        self.server.shutdown()
-        self.server.server_close()
-        self.thread.join(timeout=2)
         webhook.ROOT, webhook.TOKEN = self.old_root, self.old_token
         self.tempdir.cleanup()
 
     def request(self, method, path, body=None, headers=None):
-        print('TEST HTTP body bytes:', None if body is None else len(body), 'headers:', headers)
-        connection = http.client.HTTPConnection('127.0.0.1', self.port, timeout=10)
-        connection.request(method, path, body=body, headers=headers or {})
-        response = connection.getresponse()
-        payload = response.read()
-        result = (response.status, response.getheader('Content-Type'), json.loads(payload))
-        connection.close()
-        return result
+        class Harness(webhook.Handler):
+            def __init__(self, request_path, request_body, request_headers):
+                self.path = request_path
+                self.headers = Message()
+                self.headers['Authorization'] = request_headers.get('Authorization', '')
+                self.headers['Content-Type'] = request_headers.get('Content-Type', '')
+                self.headers['Content-Length'] = request_headers.get(
+                    'Content-Length', str(len(request_body))
+                )
+                self.rfile = io.BytesIO(request_body)
+                self.wfile = io.BytesIO()
+                self.client_address = ('127.0.0.1', 0)
+                self.response_status = None
+                self.response_headers = {}
+
+            def send_response(self, status, message=None):
+                self.response_status = status
+
+            def send_header(self, key, value):
+                self.response_headers[key] = value
+
+            def end_headers(self):
+                pass
+
+            def log_error(self, fmt, *args):
+                pass
+
+            def log_message(self, fmt, *args):
+                pass
+
+        request_body = body or b''
+        request_headers = headers or {}
+        handler = Harness(path, request_body, request_headers)
+        if method == 'GET':
+            handler.do_GET()
+        elif method == 'POST':
+            handler.do_POST()
+        else:
+            raise AssertionError('unsupported test HTTP method')
+        payload = handler.wfile.getvalue()
+        return (
+            handler.response_status,
+            handler.response_headers.get('Content-Type'),
+            json.loads(payload),
+        )
 
     def archive(self, manifest, extra=None):
         buffer = io.BytesIO()
