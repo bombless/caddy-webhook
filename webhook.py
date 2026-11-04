@@ -326,7 +326,6 @@ class Handler(BaseHTTPRequestHandler):
         if length < 1 or length > MAX_UPLOAD_BYTES:
             self.send_json(413, {'error': 'invalid_size'})
             return None
-        print('UPLOAD stream:', type(self.rfile), 'length:', len(self.rfile.getvalue()) if hasattr(self.rfile, 'getvalue') else 'n/a', 'position:', self.rfile.tell() if hasattr(self.rfile, 'tell') else 'n/a')
         fd, upload = tempfile.mkstemp(dir=os.path.join(ROOT, 'tmp'), suffix='.zip')
         try:
             with os.fdopen(fd, 'wb') as target:
@@ -336,6 +335,7 @@ class Handler(BaseHTTPRequestHandler):
                     if not chunk:
                         raise InvalidArchiveError('incomplete upload')
                     target.write(chunk)
+                    remaining -= len(chunk)
             return upload
         except Exception:
             if os.path.exists(upload):
