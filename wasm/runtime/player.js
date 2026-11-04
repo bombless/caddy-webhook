@@ -117,7 +117,7 @@ export class WasmGamePlayer {
   }
   _timestampMicros() { return Math.max(0,Math.round((performance.now()-this.startedAt)*1000)); }
   _send(event) {
-    if(!this.worker || this.pendingInputs>=this.options.maxQueue)return;
+    if(!this.worker || this.pendingInputs>=this.options.maxQueue+(event.type==="KEY_UP"?32:0))return;
     const now=performance.now(); if(now-this.inputWindowStart>=1000){this.inputWindowStart=now;this.inputCount=0;}
     if(this.inputCount>=128)return; this.inputCount++; this.pendingInputs++;
     this.worker.postMessage({type:"INPUT",event});
