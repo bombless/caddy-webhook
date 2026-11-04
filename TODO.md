@@ -129,7 +129,7 @@ This checklist tracks the work required to take the initial runtime skeleton in 
 
 Current working branch: `feat/wasm-plugin-runtime`.
 
-Current branch HEAD at handoff: `6b707168ccc4cb4d55b26f48b2a94e395f1b4d3f` (`test: make worker assertions realm-independent`).
+Implementation HEAD before this TODO-only handoff update: `6b707168ccc4cb4d55b26f48b2a94e395f1b4d3f` (`test: make worker assertions realm-independent`). The latest branch commit is the TODO refresh immediately following that implementation commit.
 
 The ABI v1 contract and the first round of loader/worker hardening are implemented, but **have not been validated by running tests or a browser**. Do not describe the runtime as production-ready. The next session should:
 
