@@ -70,6 +70,18 @@ The Caddy example is repository guidance only. It does not update a running Cadd
 
 Configure `GAME_DEPLOY_WEBHOOK_URL` and `DEPLOY_TOKEN` as GitHub Actions secrets before running the package publication workflow. The URL secret must end in `/_deploy/game`. Never print or commit the token.
 
+## Updating the local webhook service
+
+To install the `webhook.py` from the current local `main` checkout on the host that runs the webhook:
+
+```sh
+sudo ./scripts/update-webhook.sh
+```
+
+The script deliberately does not fetch Git changes or alter Caddy, the systemd unit, or its environment file. It requires a clean tracked worktree on `main`, runs the Python webhook test suite, backs up the installed program under `/var/backups/static-deploy-webhook/`, installs the new file atomically, restarts `static-deploy-webhook.service`, and checks `GET http://127.0.0.1:8765/health`. If restart or health verification fails, it restores the previous file and attempts to restart the previous version. Set `WEBHOOK_HEALTH_URL` only when the service is intentionally configured at a different local health URL. Untracked build artifacts are left untouched.
+
+This is a local host-administration command and is not exposed as a webhook API. It must be run on the webhook host with `sudo`; it does not update the static site or game packages.
+
 ## Local validation
 
 ```sh
