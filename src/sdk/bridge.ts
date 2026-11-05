@@ -19,10 +19,7 @@ export function createGameBridge() {
     window.parent.postMessage(envelope(instanceId, type, payload, requestId), hostOrigin || '*')
   }
   const maybeReady = () => {
-    if (mounted && instanceId && !readySent) {
-      readySent = true
-      emit('GAME_READY', {})
-    }
+    if (mounted && instanceId && !readySent) { readySent = true; emit('GAME_READY', {}) }
   }
   const on = (type: string, fn: Listener) => {
     if (!listeners.has(type)) listeners.set(type, new Set())
@@ -117,5 +114,5 @@ export function createGameBridge() {
     for (const p of pending.values()) { clearTimeout(p.timer); p.reject(new Error('Bridge disposed')) }
     pending.clear(); listeners.clear()
   }
-  return { runtime, on, ready: () => { mounted = true; maybeReady() }, dispose }
+  return { runtime, on, ready: () => { mounted = true; maybeReady() }, fail: (message: string) => emit('GAME_ERROR', { message }), dispose }
 }
