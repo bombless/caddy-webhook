@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "pebble-match",
   "name": "Pebble Match",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "pluginType": "vue3",
   "entry": "Game.vue",
   "runtime": {

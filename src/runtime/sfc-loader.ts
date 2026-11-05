@@ -12,7 +12,7 @@ export interface LoadedComponent {
 
 export async function loadGameComponent(url: string, runtime: GameRuntime): Promise<LoadedComponent> {
   if (url.endsWith('.vue')) {
-    const response = await fetch(url)
+    const response = await fetch(url, { cache: 'no-cache' })
     if (!response.ok) {
       throw new Error(`Failed to fetch Vue component from ${url} (${response.status})`)
     }
@@ -28,7 +28,7 @@ export async function loadGameComponent(url: string, runtime: GameRuntime): Prom
       cleanup: () => {},
     }
   } catch {
-    const response = await fetch(url)
+    const response = await fetch(url, { cache: 'no-cache' })
     if (!response.ok) {
       throw new Error(`Failed to fetch module from ${url} (${response.status})`)
     }

@@ -24,6 +24,9 @@ handle /games/* {
 	root * /var/lib/static-deploy
 	@wasm path_regexp wasm \.wasm$
 	header @wasm Content-Type "application/wasm"
+	@vue path *.vue
+	header @vue Content-Type "text/plain; charset=utf-8"
+	header @vue Cache-Control "no-cache"
 	file_server
 }
 
