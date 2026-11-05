@@ -1,0 +1,17 @@
+{
+  "manifestVersion": 1,
+  "id": "pebble-match",
+  "name": "Pebble Match",
+  "version": "1.0.0",
+  "pluginType": "vue3",
+  "entry": "Game.vue",
+  "runtime": {
+    "apiVersion": "1",
+    "display": {
+      "aspectRatio": "1:1",
+      "orientation": "any",
+      "resize": "contain"
+    },
+    "capabilities": ["input.pointer", "score", "storage"]
+  }
+}
