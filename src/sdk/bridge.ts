@@ -7,6 +7,8 @@ export function createGameBridge() {
   let hostOrigin = ''
   let packageBase = new URL('./', window.location.href)
   let capabilities = new Set<string>()
+  let mounted = false
+  let readySent = false
   const listeners = new Map<string, Set<Listener>>()
   const pending = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: number }>()
   const notify = (type: string, payload: Record<string, unknown>) => {
@@ -15,6 +17,12 @@ export function createGameBridge() {
   const emit = (type: string, payload: Record<string, unknown> = {}, requestId?: string) => {
     if (!instanceId) return
     window.parent.postMessage(envelope(instanceId, type, payload, requestId), hostOrigin || '*')
+  }
+  const maybeReady = () => {
+    if (mounted && instanceId && !readySent) {
+      readySent = true
+      emit('GAME_READY', {})
+    }
   }
   const on = (type: string, fn: Listener) => {
     if (!listeners.has(type)) listeners.set(type, new Set())
@@ -31,12 +39,12 @@ export function createGameBridge() {
     if (event.source !== window.parent || !isEnvelope(event.data)) return
     const m = event.data
     if (m.type === 'HOST_INIT' && !instanceId) {
+      if (m.payload.apiVersion !== String(PROTOCOL_VERSION)) return
       instanceId = m.instanceId
       hostOrigin = event.origin === 'null' ? '*' : event.origin
-      if (m.payload.apiVersion !== String(PROTOCOL_VERSION)) return
       packageBase = new URL(String(m.payload.packageUrl), window.location.href)
       capabilities = new Set(Array.isArray(m.payload.capabilities) ? m.payload.capabilities.filter((x): x is string => typeof x === 'string') : [])
-      emit('GAME_READY', {})
+      maybeReady()
       return
     }
     if (!instanceId || m.instanceId !== instanceId) return
@@ -45,8 +53,10 @@ export function createGameBridge() {
       if (p) { clearTimeout(p.timer); pending.delete(m.requestId); m.payload.ok ? p.resolve(m.payload.value) : p.reject(new Error(String(m.payload.error ?? 'Host request failed'))) }
       return
     }
-    if (m.type === 'HOST_PAUSE') { notify('LIFECYCLE_PAUSE', {}); return }
-    if (m.type === 'HOST_RESUME') { notify('LIFECYCLE_RESUME', {}); return }
+    if (m.type === 'HOST_START') { notify('LIFECYCLE_START', m.payload); return }
+    if (m.type === 'HOST_PAUSE') { notify('LIFECYCLE_PAUSE', m.payload); return }
+    if (m.type === 'HOST_RESUME') { notify('LIFECYCLE_RESUME', m.payload); return }
+    if (m.type === 'HOST_END') { notify('LIFECYCLE_END', m.payload); return }
     if (m.type === 'HOST_DISPOSE') { notify('LIFECYCLE_DISPOSE', {}); dispose(); return }
     if (m.type === 'VIEWPORT_RESIZE') notify('VIEWPORT_RESIZE', m.payload)
     if (m.type === 'INPUT_EVENT') notify('INPUT_EVENT', m.payload)
@@ -73,7 +83,7 @@ export function createGameBridge() {
   window.addEventListener('pointermove', pointer)
   const runtime: GameRuntime = {
     assets: { url: (path) => {
-      if (typeof path !== 'string' || !path || path.startsWith('/') || path.includes('\\') || path.split('/').some(x => x === '..' || x === '.')) throw new Error('Asset path must be package-relative')
+      if (typeof path !== 'string' || !path || path.startsWith('/') || path.includes('\\\\') || path.split('/').some(x => x === '..' || x === '.')) throw new Error('Asset path must be package-relative')
       const resolved = new URL(path, packageBase)
       if (resolved.origin !== packageBase.origin || !resolved.pathname.startsWith(packageBase.pathname)) throw new Error('Asset path escapes package')
       return resolved.href
@@ -107,5 +117,5 @@ export function createGameBridge() {
     for (const p of pending.values()) { clearTimeout(p.timer); p.reject(new Error('Bridge disposed')) }
     pending.clear(); listeners.clear()
   }
-  return { runtime, dispose }
+  return { runtime, on, ready: () => { mounted = true; maybeReady() }, dispose }
 }
