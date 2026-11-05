@@ -252,7 +252,8 @@
                 "items": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 240
+                  "maxLength": 240,
+                  "pattern": ".*\\\\S.*"
                 }
               },
               "controls": {
@@ -274,7 +275,8 @@
                     "label": {
                       "type": "string",
                       "minLength": 1,
-                      "maxLength": 80
+                      "maxLength": 80,
+                      "pattern": ".*\\\\S.*"
                     },
                     "inputs": {
                       "type": "array",
@@ -284,11 +286,13 @@
                       "items": {
                         "type": "string",
                         "minLength": 1,
-                        "maxLength": 32
+                        "maxLength": 32,
+                        "pattern": ".*\\\\S.*"
                       }
                     }
                   }
-                }
+                },
+                "uniqueItems": true
               },
               "tips": {
                 "type": "array",
@@ -296,7 +300,8 @@
                 "items": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 240
+                  "maxLength": 240,
+                  "pattern": ".*\\\\S.*"
                 }
               }
             }
