@@ -12,7 +12,7 @@
         v-for="(color, position) in cells"
         :key="position"
         type="button"
-        :class="['cell', color, { marked: marked.includes(position) }]"
+        :class="['cell', color, { marked: marked.includes(position), 'is-empty': !color }]"
         :aria-label="color ? `${color} pebble` : 'Empty space'"
         :disabled="!color"
         @click="play(position)"
@@ -152,7 +152,7 @@ function restart() {
 // Lifecycle and exposed methods
 async function startGame() {
   isStarted.value = true
-  if (cells.value.length === 0) {
+  if (cells.value.length === 0 || !cells.value.some(Boolean)) {
     restart()
   }
   try {
@@ -176,12 +176,19 @@ function getSaveData() {
 
 function loadSaveData(data) {
   if (data && typeof data === 'object') {
-    if (Array.isArray(data.cells)) cells.value = data.cells
+    if (Array.isArray(data.cells) && data.cells.length === COLUMNS * ROWS && data.cells.some(Boolean)) {
+      cells.value = data.cells
+    } else {
+      restart()
+    }
     if (typeof data.cleared === 'number') cleared.value = data.cleared
     if (typeof data.best === 'number') best.value = data.best
     if (typeof data.status === 'string') status.value = data.status
   }
 }
+
+// Initialize board immediately so pebbles exist on mount
+restart()
 
 defineExpose({
   startGame,
@@ -253,17 +260,20 @@ h1 {
   padding: 0;
   cursor: pointer;
   box-shadow: inset 0 7px 0 rgba(255, 255, 255, 0.24);
+  transition: transform 0.1s ease;
 }
 
-.cell:empty {
+.cell.is-empty,
+.cell:disabled {
   visibility: hidden;
   cursor: default;
+  pointer-events: none;
 }
 
-.cell.sand { background: #e6c170; }
-.cell.moss { background: #6ea15d; }
-.cell.river { background: #6e93c4; }
-.cell.clay { background: #c47a5e; }
+.cell.sand { background: #e6c170; visibility: visible; }
+.cell.moss { background: #6ea15d; visibility: visible; }
+.cell.river { background: #6e93c4; visibility: visible; }
+.cell.clay { background: #c47a5e; visibility: visible; }
 
 .cell.marked {
   outline: 3px solid white;
