@@ -163,6 +163,7 @@ function closeHelp() {
   if (helpWasRunning) {
     wasmRuntime?.resume()
     state.value = 'running'
+    canvas.value?.focus({ preventScroll: true })
   }
   helpWasRunning = false
 }
