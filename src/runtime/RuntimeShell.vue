@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, type Component } from 'vue'
+import type { createGameBridge } from '../sdk/bridge'
 
-type Bridge = ReturnType<typeof import('./sdk/bridge').createGameBridge>
+type Bridge = ReturnType<typeof createGameBridge>
 const props = defineProps<{ gameComponent: Component; bridge: Bridge }>()
 const gameRef = ref<Record<string, unknown> | null>(null)
 const unsubscribe: Array<() => void> = []
