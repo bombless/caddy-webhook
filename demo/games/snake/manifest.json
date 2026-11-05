@@ -35,7 +35,7 @@
         "label": "Move up",
         "inputs": [
           "ArrowUp",
-          "W"
+          "KeyW"
         ]
       },
       {
@@ -43,7 +43,7 @@
         "label": "Move down",
         "inputs": [
           "ArrowDown",
-          "S"
+          "KeyS"
         ]
       },
       {
@@ -51,7 +51,7 @@
         "label": "Move left",
         "inputs": [
           "ArrowLeft",
-          "A"
+          "KeyA"
         ]
       },
       {
@@ -59,14 +59,14 @@
         "label": "Move right",
         "inputs": [
           "ArrowRight",
-          "D"
+          "KeyD"
         ]
       },
       {
         "action": "pause",
         "label": "Pause / resume",
         "inputs": [
-          "P",
+          "KeyP",
           "Pause"
         ]
       },
