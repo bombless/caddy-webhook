@@ -13,6 +13,11 @@ on:
         required: false
         default: true
         type: boolean
+      build_snake:
+        description: "Compile the checked-in WASM Snake game into the package directory"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -35,6 +40,25 @@ jobs:
         run: |
           npm install
           npm run build
+      - name: Install WASM toolchain
+        if: ${{ inputs.build_snake }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld
+      - name: Build Snake WASM module
+        if: ${{ inputs.build_snake }}
+        env:
+          PACKAGE_DIR: ${{ inputs.package_dir }}
+        run: |
+          set -euo pipefail
+          test -f demo/game.c || { echo "::error::demo/game.c not found on selected ref"; exit 1; }
+          test -f "$PACKAGE_DIR/manifest.json" || { echo "::error::Snake package manifest not found"; exit 1; }
+          clang --target=wasm32 -O2 -fno-builtin -nostdlib \
+            -Wl,--no-entry -Wl,--export-memory \
+            -Wl,--initial-memory=262144 -Wl,--max-memory=1048576 \
+            -Wl,-z,stack-size=32768 -Wl,--strip-all \
+            -o "$PACKAGE_DIR/game.wasm" demo/game.c
+          test -s "$PACKAGE_DIR/game.wasm"
       - name: Prepare package archive
         env:
           PACKAGE_DIR: ${{ inputs.package_dir }}
