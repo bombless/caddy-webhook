@@ -46,7 +46,7 @@ function validateAbiSignatures(bytes) {
         for (let p = 0; p < paramCount; p++) params.push(view.getUint8(offset++));
         const resultCount = readU32(end), results = [];
         for (let r = 0; r < resultCount; r++) results.push(view.getUint8(offset++));
-        if (offset > end || params.some(x => x !== 0x7f) || results.some(x => x !== 0x7f)) throw Error("unsupported WASM ABI value type");
+        if (offset > end || params.some(x => ![0x7f, 0x7e, 0x7d].includes(x)) || results.some(x => ![0x7f, 0x7e, 0x7d].includes(x))) throw Error("unsupported WASM value type (supported: i32, i64, f32)");
         types.push({ params: params.length, results: results.length });
       }
     } else if (id === 2) {
