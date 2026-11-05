@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bombless.github.io/caddy-webhook/schemas/game-plugin-manifest.schema.json",
+  "title": "Bombless Shared Game Package Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifestVersion", "id", "name", "version", "pluginType", "entry", "runtime"],
+  "properties": {
+    "manifestVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\\+([0-9A-Za-z.-]+))?$" },
+    "pluginType": { "enum": ["vue3", "wasm"] },
+    "entry": { "type": "string", "minLength": 1, "maxLength": 240 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "pluginType": { "const": "vue3" } } },
+      "then": {
+        "properties": {
+          "entry": { "const": "index.html" },
+          "runtime": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["apiVersion", "display", "capabilities"],
+            "properties": {
+              "apiVersion": { "const": "1" },
+              "display": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "aspectRatio": { "type": "string", "maxLength": 16, "pattern": "^\\d+(?:\\.\\d+)?:\\d+(?:\\.\\d+)?$" },
+                  "orientation": { "enum": ["landscape", "portrait", "any"] },
+                  "resize": { "enum": ["contain", "cover"] }
+                }
+              },
+              "capabilities": {
+                "type": "array", "maxItems": 16, "uniqueItems": true,
+                "items": { "enum": ["input.keyboard", "input.pointer", "audio", "storage", "score"] }
+              }
+            }
+          }
+        },
+        "required": ["runtime"]
+      }
+    },
+    {
+      "if": { "properties": { "pluginType": { "const": "wasm" } } },
+      "then": {
+        "properties": {
+          "entry": { "type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*:)[A-Za-z0-9._/-]+\\.wasm$" },
+          "runtime": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["apiVersion", "display", "capabilities", "wasm"],
+            "properties": {
+              "apiVersion": { "const": "1" },
+              "display": {
+                "type": "object", "additionalProperties": false,
+                "required": ["width", "height"],
+                "properties": {
+                  "width": { "type": "integer", "minimum": 1, "maximum": 1024 },
+                  "height": { "type": "integer", "minimum": 1, "maximum": 1024 },
+                  "pixelScale": { "enum": ["integer", "fit"] },
+                  "orientation": { "enum": ["landscape", "portrait", "any"] }
+                }
+              },
+              "capabilities": {
+                "type": "array", "maxItems": 16, "uniqueItems": true,
+                "items": { "enum": ["input.keyboard", "input.pointer", "audio", "storage", "score"] }
+              },
+              "wasm": {
+                "type": "object", "additionalProperties": false,
+                "required": ["abi", "abiVersion", "maxMemoryPages", "maxOutputBytes", "renderMode"],
+                "properties": {
+                  "abi": { "const": "bombless-game-abi" },
+                  "abiVersion": { "const": 1 },
+                  "maxMemoryPages": { "type": "integer", "minimum": 1, "maximum": 256 },
+                  "maxOutputBytes": { "type": "integer", "minimum": 4, "maximum": 4194304 },
+                  "renderMode": { "const": "rgba" }
+                }
+              }
+            }
+          }
+        },
+        "required": ["runtime"]
+      }
+    }
+  ]
+}

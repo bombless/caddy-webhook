@@ -1,0 +1,13 @@
+{
+  "manifestVersion": 1,
+  "id": "hello-vue3",
+  "name": "Hello Vue 3",
+  "version": "1.0.0",
+  "pluginType": "vue3",
+  "entry": "index.html",
+  "runtime": {
+    "apiVersion": "1",
+    "display": { "aspectRatio": "16:9", "orientation": "landscape", "resize": "contain" },
+    "capabilities": ["score", "storage"]
+  }
+}

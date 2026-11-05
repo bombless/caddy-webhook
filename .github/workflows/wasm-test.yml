@@ -1,0 +1,26 @@
+name: WASM runtime tests
+
+on:
+  push:
+    paths:
+      - "wasm/**"
+      - ".github/workflows/wasm-test.yml"
+  pull_request:
+    paths:
+      - "wasm/**"
+      - ".github/workflows/wasm-test.yml"
+
+jobs:
+  wasm-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check JavaScript syntax
+        run: |
+          node --check wasm/runtime/player.js
+          node --check wasm/runtime/worker.js
+      - name: Run worker ABI tests
+        run: node --test wasm/test/*.test.js

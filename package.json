@@ -1,0 +1,25 @@
+{
+  "name": "bombless-game-platform",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run validate:example && vite build && vite build --config examples/hello-vue3/vite.config.ts && node scripts/copy-example-manifest.mjs && node scripts/copy-wasm-runtime.mjs",
+    "preview": "vite preview",
+    "validate:example": "node scripts/validate-plugin.mjs examples/hello-vue3",
+    "test": "node --test && npm run test:python",
+    "test:python": "python3 -m unittest discover -s tests -v"
+  },
+  "dependencies": {
+    "vue": "3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "5.2.1",
+    "typescript": "5.7.2",
+    "vite": "6.0.7"
+  }
+}
