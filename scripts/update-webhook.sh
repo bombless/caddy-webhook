@@ -13,8 +13,8 @@ GAMES_ROOT="$ROOT/games"
 UI_MARKER="$ROOT/.game-library-ui-owned"
 BACKUP_DIR='/var/backups/static-deploy-webhook'
 HEALTH_URL="${WEBHOOK_HEALTH_URL:-http://127.0.0.1:8765/health}"
-LIBRARY_URL="${GAME_LIBRARY_URL:-http://127.0.0.1/games/}"
-REGISTRY_URL="${GAME_REGISTRY_URL:-http://127.0.0.1/_games/registry.json}"
+LIBRARY_URL='https://bombless.duckdns.org/games/'
+REGISTRY_URL='https://bombless.duckdns.org/_games/registry.json'
 CADDY_GROUP_OVERRIDE="${CADDY_GROUP:-}"
 
 log() { printf '[update-webhook] %s\n' "$*"; }
