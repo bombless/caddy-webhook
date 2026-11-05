@@ -25,3 +25,17 @@ footer span { margin-right: auto }
 button:disabled { opacity: .45; cursor: not-allowed }
 
 .permission-row { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; color: #9aa8bf; font-size: 13px }
+
+
+.game-help { border: 1px solid #39445b; border-radius: 14px; padding: 18px 22px; background: #111a2d; color: #dce5f4; }
+.help-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.help-header h2 { margin: 0; font-size: 20px; }
+.help-header p, .game-help > p { margin: 6px 0 12px; color: #b9c6dc; }
+.help-locale { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.help-section { margin-top: 16px; }
+.help-section h3 { margin: 0 0 8px; font-size: 14px; color: #9fb8e8; }
+.help-section ul, .help-section ol { margin: 0; padding-left: 22px; }
+.help-controls { list-style: none; padding: 0 !important; display: grid; gap: 8px; }
+.help-controls li { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.key-list { display: inline-flex; flex-wrap: wrap; gap: 5px; }
+kbd { border: 1px solid #596984; border-bottom-width: 2px; border-radius: 5px; padding: 2px 7px; background: #202d45; color: #f4f7fc; font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
