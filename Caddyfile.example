@@ -1,34 +1,35 @@
 # Merge these handlers into the existing site block. Keep the existing
 # reverse_proxy handler as the final fallback for unrelated application paths.
-#
-# The webhook serves only control-plane JSON/uploads. Static game files are
-# served directly by Caddy from persistent storage, outside the replaceable
-# current site release.
 
 handle /_deploy* {
-    reverse_proxy 127.0.0.1:8765
+	reverse_proxy 127.0.0.1:8765
 }
 
-handle /_games/registry.json {
-    root * /var/lib/static-deploy/games
-    rewrite * /registry.json
-    header Cache-Control "no-store"
-    file_server
-}
+redir /games /games/ 308
 
-@game_packages path /games/*
+# The UI and immutable packages share one persistent document root. Keeping the
+# full /games prefix in the filesystem path avoids collisions between index/assets
+# and package-owned <game-id>/<version>/ directories.
+@game_packages path_regexp game_packages ^/games/[a-z0-9][a-z0-9-]{0,63}/(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?/.*$
 header @game_packages Access-Control-Allow-Origin "*"
 header @game_packages Cache-Control "public, max-age=31536000, immutable"
 header @game_packages X-Content-Type-Options "nosniff"
 
-handle_path /games/* {
-    root * /var/lib/static-deploy/games
-    @wasm path *.wasm
-    header @wasm Content-Type "application/wasm"
-    file_server
+handle /games/* {
+	root * /var/lib/static-deploy
+	@wasm path_regexp wasm \.wasm$
+	header @wasm Content-Type "application/wasm"
+	file_server
+}
+
+handle /_games/registry.json {
+	root * /var/lib/static-deploy/games
+	rewrite * /registry.json
+	header Cache-Control "no-store"
+	file_server
 }
 
 handle_path /app/* {
-    root * /var/lib/static-deploy/current
-    file_server
+	root * /var/lib/static-deploy/current
+	file_server
 }

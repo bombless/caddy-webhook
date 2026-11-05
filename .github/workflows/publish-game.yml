@@ -6,7 +6,7 @@ on:
       package_dir:
         description: "Directory containing one built game package (manifest.json at its root)"
         required: false
-        default: "dist/games/hello-vue3"
+        default: "dist/_build/hello-vue3"
         type: string
       build_example:
         description: "Build the checked-in Vue example before packaging (disable for a prebuilt custom/WASM package)"

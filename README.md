@@ -1,99 +1,67 @@
-# Caddy Static Deployment Webhook and Game Library
+# Bombless Game Platform
 
-This repository contains the authenticated Python deployment webhook, Caddy routing examples, a Vue 3 game host/runtime, and a constrained WebAssembly game runtime.
+The game-library UI is served at `/games/` and is installed together with the Python webhook by the local root-only `scripts/update-webhook.sh` updater. It is not independently published and there is no a separate UI upload endpoint endpoint or UI deployment workflow.
 
-## Deployment model
+Immutable game packages are published independently through authenticated `POST /_deploy/game`. Each package is installed under `/var/lib/static-deploy/games/<game-id>/<version>/`; publishing a package updates `/var/lib/static-deploy/games/registry.json` without replacing the UI or any earlier package. The public registry is `/_games/registry.json`.
 
-There are two independent publication flows:
+The legacy whole-site `POST /_deploy` endpoint is disabled and returns 404. Do not re-enable it: a general site deployment must not be able to replace the game UI or package store.
 
-- **Whole-site release:** `POST /_deploy` accepts a ZIP containing a root `index.html`, publishes it under `/var/lib/static-deploy/releases/`, and atomically switches `/var/lib/static-deploy/current`. This remains the platform-shell deployment and retains rollback semantics.
-- **Game package:** `POST /_deploy/game` accepts exactly one package ZIP with a root `manifest.json`. It installs an immutable `id/version` directory under `/var/lib/static-deploy/games/` and atomically updates the public registry. It never changes `current` and never deletes earlier games or versions.
+## HTTP API
 
-Do not point a whole-site ZIP at the game endpoint or change `/_deploy` into a merge operation.
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | `/health` | Webhook process health |
+| POST | `/_deploy` | Disabled; returns 404 |
+| POST | `/_deploy/game` | Authenticated immutable game-package ZIP publishing |
+| GET | `/_games/registry.json` | Public game registry |
+| GET | `/games/` | Game-library UI installed by the local updater |
+| GET | `/games/{id}/{version}/...` | Immutable package files |
 
-## Webhook API
+Game publishing requires `Authorization: Bearer <DEPLOY_TOKEN>` and `Content-Type: application/zip`. Duplicate ID/version returns 409; invalid archives return 400; missing/incorrect token returns 401.
 
-All POST requests require `Authorization: Bearer $DEPLOY_TOKEN` and `Content-Type: application/zip`.
-
-| Method and path | Purpose |
-| --- | --- |
-| `GET /health` | Process health check |
-| `POST /_deploy` | Publish a complete site release |
-| `POST /_deploy/game` | Publish one immutable game package |
-| `GET /_games/registry.json` | Public game registry |
-
-Uploads are limited to 100 MiB, 10,000 ZIP entries, and 500 MiB expanded content. ZIP paths are checked for traversal, duplicate/conflicting paths, special files and symlinks. Game manifests are parsed as strict UTF-8 JSON; duplicate JSON keys, unsupported manifest versions, invalid IDs, non-semver versions, unsafe entry paths, unsupported plugin types, and missing entries are rejected.
-
-The game ID format is `[a-z0-9][a-z0-9-]{0,63}`. Versions use semantic version syntax. A published `id/version` is immutable: repeating it returns HTTP 409. A newer semantic version is added alongside previous versions and becomes latest according to SemVer precedence. Build metadata does not affect SemVer precedence; versions tied on precedence use a lexical full-version tie-breaker for deterministic ordering.
-
-## Persistent storage layout
+## Storage
 
 ```text
 /var/lib/static-deploy/
-  current -> releases/<active-release>
-  releases/
-    <site-release>/
-  tmp/
+  tmp/                         # webhook upload staging
   games/
-    registry.json
-    <game-id>/
-      <version>/
-        manifest.json
-        index.html or game.wasm
-        assets/...
+    index.html                 # UI, installed with webhook update
+    assets/                    # Vite UI assets
+    wasm/                      # copied WASM runtime assets
+    registry.json              # managed only by game-package publishing
+    <game-id>/<version>/       # immutable package namespace
 ```
 
-Game packages must remain outside `releases/` and outside `current`. The webhook process needs write access to `tmp/`, `releases/`, and `games/`; Caddy needs read/traverse access to the published files. A package directory may be left orphaned if the process crashes after its atomic installation but before the registry replacement. Such a directory is intentionally not advertised; reconcile it manually after verifying its manifest and contents.
+The updater owns only the UI top-level paths explicitly listed in `scripts/update-webhook.sh`; `assets` and `wasm` are reserved package IDs to avoid collisions. It must preserve `games/registry.json` and every package directory. A private ownership marker at `/var/lib/static-deploy/.game-library-ui-owned` distinguishes UI-owned paths from pre-existing or orphan package directories; the first install refuses ambiguous collisions. Never use a broad mirror or `rm -rf games/*`. UI output is checked for collisions with package-owned paths before installation.
 
-## Package contract
+## Development and CI
 
-The shared schema is [schemas/game-plugin-manifest.schema.json](schemas/game-plugin-manifest.schema.json). Vue 3 and WASM use the same outer manifest fields: `manifestVersion`, `id`, `name`, `version`, `pluginType`, `entry`, and `runtime`.
+Requirements: Python 3.10+ and Node.js 22.
 
-- Vue 3 packages declare `pluginType: "vue3"`, `entry: "index.html"`, `runtime.apiVersion: "1"`, a display object, and a capabilities array.
-- WASM packages declare `pluginType: "wasm"`, a package-relative `.wasm` entry, display width/height, capabilities, and the ABI v1 declaration documented in `wasm/schema/manifest.schema.json`.
+```sh
+npm ci
+npm test
+npm run build
+```
 
-Capabilities are requests, not grants. The WASM host defaults to deny-all and only implements keyboard/pointer grants; the library UI requires an explicit user action before granting those input capabilities. Audio and storage remain denied. See [Vue 3 runtime documentation](docs/vue3-plugin-runtime.md), [Vue 3 design](docs/design/vue3-plugin.md), and [WASM runtime documentation](wasm/README.md).
+`npm test` runs Node tests and Python webhook tests. `npm run build` validates the Vue example, builds the main Vite UI, emits the Vue example under `dist/_build/hello-vue3`, and copies the WASM runtime to `dist/wasm/`.
 
-A successful package deployment returns its immutable package URL and canonical registry URL. Registry schema version 1 contains games sorted by ID and each game's versions sorted by SemVer precedence. Each version points to its own manifest URL.
+`.github/workflows/deploy.yml` is CI only: it tests/builds and uploads a build artifact. It does not call a deployment endpoint. Game package publication remains in the dedicated `publish-game.yml` / `publish-snake.yml` workflows and uses `GAME_DEPLOY_WEBHOOK_URL` ending in `/_deploy/game`.
 
-## Caddy routing
+## Local paired updater
 
-Merge [Caddyfile.example](Caddyfile.example) into the actual site block, preserving the existing application reverse-proxy fallback. It routes the webhook control plane, registry, persistent `/games/*` package files, and replaceable `/app/*` site release separately. Static WASM assets are served with `application/wasm`. Game package CORS headers are scoped to `/games/*`; do not apply wildcard CORS to the webhook or platform shell.
-
-The Caddy example is repository guidance only. It does not update a running Caddy instance. Validate the real Caddyfile before reloading the server.
-
-## GitHub Actions
-
-- `.github/workflows/deploy.yml` builds/tests and publishes the platform shell to `POST /_deploy` on `main`, using `DEPLOY_WEBHOOK_URL` and `DEPLOY_TOKEN` secrets.
-- `.github/workflows/publish-game.yml` is a manual package-publication workflow. It builds the Vue example package (or accepts a package directory), creates a ZIP with `manifest.json` at its root, and posts it to `/_deploy/game`.
-- The reusable whole-site deployment workflow remains available at `.github/workflows/deploy-static.yml`; its caller must continue to target `/_deploy`. The package workflow's `build_example` input should be disabled when publishing an already-built custom/WASM package directory, so the platform build does not clear that directory.
-
-Configure `GAME_DEPLOY_WEBHOOK_URL` and `DEPLOY_TOKEN` as GitHub Actions secrets before running the package publication workflow. The URL secret must end in `/_deploy/game`. Never print or commit the token.
-
-## Updating the local webhook service
-
-To install the `webhook.py` from the current local `main` checkout on the host that runs the webhook:
+On the webhook host, from a clean tracked checkout of `main`, run:
 
 ```sh
 sudo ./scripts/update-webhook.sh
 ```
 
-The script deliberately does not fetch Git changes or alter Caddy, the systemd unit, or its environment file. It requires a clean tracked worktree on `main`, runs the Python webhook test suite, backs up the installed program under `/var/backups/static-deploy-webhook/`, installs the new file atomically, restarts `static-deploy-webhook.service`, and checks `GET http://127.0.0.1:8765/health`. If restart or health verification fails, it restores the previous file and attempts to restart the previous version. Set `WEBHOOK_HEALTH_URL` only when the service is intentionally configured at a different local health URL. Untracked build artifacts are left untouched.
+The updater validates the checkout and build, backs up the installed webhook and UI-owned files under `/var/backups/static-deploy-webhook/`, stages both on their destination filesystems, installs them while preserving registry/package data, restarts `static-deploy-webhook.service`, and verifies service health plus `/games/` and registry/package readability. A failed install or smoke check restores both previous components and restarts the previous service. The build runs from a temporary archive of the committed tree, so unrelated untracked `dist/`, `node_modules/`, caches, and other artifacts remain untouched. Untracked files are not treated as release input; the lockfile must be committed/tracked for `npm ci`.
 
-This is a local host-administration command and is not exposed as a webhook API. It must be run on the webhook host with `sudo`; it does not update the static site or game packages.
+The updater is a local root operation, not a remotely callable API. Backups are timestamped and retained; cleanup/retention is an explicit separate maintenance task.
 
-## Local validation
+## Production rollout
 
-```sh
-python3 -m unittest discover -s tests -v
-npm test
-npm run build
-```
+Repository edits, CI, and local tests do not update production. Before a production rollout, inspect the live Caddyfile, service unit, EnvironmentFile metadata, service identity/groups, persistent storage inventory, registry, package contents, and permissions. Back up the webhook, Caddy/service configuration, registry, UI files, and package storage (or take a consistent filesystem snapshot). Run the updater locally on the webhook host. Validate the full production Caddyfile before reload. Verify `/health`, `/games/`, built assets, `/_games/registry.json`, at least one existing package manifest/entry, and `POST /_deploy` returning 404. Test `POST /_deploy/game` only with a disposable valid package and confirm duplicate publication returns 409. Do not overwrite/delete real game data.
 
-See [the production webhook migration handoff](docs/deployment-webhook-handoff.md) for the exact endpoint, storage, Caddy, permissions, backup, rollout, and smoke-test contract.
-
-## Server-agent handoff boundary
-
-This repository change does **not** install or activate code on the production server. A separate agent must reconcile the deployed service with this source of truth.
-
-That agent must review the live webhook/Caddy/systemd configuration before changing it; create and permission `games/`; deploy the updated webhook; add the registry and package static routes; preserve the existing `current` and `releases/` data; back up configuration and data; validate Caddy; then restart/reload services in a controlled window. It must verify `GET /_games/registry.json`, upload a test game, confirm the package is served, and confirm a whole-site deployment/rollback leaves the library untouched. Do not assume the production server matches this repository's example configuration.
+No production restart, Caddy reload, Git push, or remote deployment is performed by repository changes alone.

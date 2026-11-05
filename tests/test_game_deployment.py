@@ -97,6 +97,7 @@ class GameDeploymentTests(unittest.TestCase):
         webhook.initialize_storage()
         with open(path, encoding='utf-8') as source:
             self.assertEqual(json.load(source), {'games': [], 'registryVersion': 1})
+        self.assertFalse(os.path.exists(os.path.join(webhook.ROOT, 'library')))
 
     def test_health_and_authentication(self):
         self.assertEqual(self.request('GET', '/health')[0], 200)
@@ -150,6 +151,11 @@ class GameDeploymentTests(unittest.TestCase):
         invalid = self.archive(self.vue_manifest('missing-entry'), {'readme.txt': 'no entry'})
         self.assertEqual(self.post('/_deploy/game', invalid)[0], 400)
 
+    def test_ui_asset_directories_are_reserved_from_game_ids(self):
+        for game_id in ('assets', 'wasm'):
+            payload = self.archive(self.vue_manifest(game_id), {'index.html': 'x'})
+            self.assertEqual(self.post('/_deploy/game', payload)[0], 400)
+
     def test_invalid_manifest_and_unsafe_paths_are_rejected(self):
         invalid_id = self.vue_manifest('../escape')
         payload = self.archive(invalid_id, {'index.html': 'x'})
@@ -162,24 +168,16 @@ class GameDeploymentTests(unittest.TestCase):
         })
         self.assertEqual(self.post('/_deploy/game', traversal)[0], 400)
 
-    def test_site_deployment_and_rollback_do_not_touch_game_library(self):
+    def test_legacy_site_deployment_is_disabled_and_does_not_touch_games(self):
         self.assertEqual(self.publish_vue()[0], 200)
-        first = os.path.join(webhook.ROOT, 'releases', 'first')
-        second = os.path.join(webhook.ROOT, 'releases', 'second')
-        os.mkdir(first)
-        os.mkdir(second)
-        current = os.path.join(webhook.ROOT, 'current')
-        os.symlink(first, current)
         site_zip = io.BytesIO()
         with zipfile.ZipFile(site_zip, 'w') as z:
-            z.writestr('index.html', 'new site')
-        status, _ctype, _body = self.post('/_deploy', site_zip.getvalue())
-        self.assertEqual(status, 200)
+            z.writestr('index.html', 'legacy site')
+        status, _ctype, body = self.post('/_deploy', site_zip.getvalue())
+        self.assertEqual((status, body), (404, {'error': 'not_found'}))
         self.assertTrue(os.path.isdir(os.path.join(webhook.ROOT, 'games', 'moonlight-courier', '1.0.0')))
-        os.symlink(second, os.path.join(webhook.ROOT, 'rollback-link'))
-        os.replace(os.path.join(webhook.ROOT, 'rollback-link'), current)
-        self.assertEqual(os.readlink(current), second)
-        self.assertTrue(os.path.isfile(os.path.join(webhook.ROOT, 'games', 'registry.json')))
+        self.assertFalse(os.path.exists(os.path.join(webhook.ROOT, 'current')))
+        self.assertFalse(os.path.exists(os.path.join(webhook.ROOT, 'library')))
 
     def test_concurrent_distinct_publications_do_not_lose_registry_entries(self):
         def publish(game_id):

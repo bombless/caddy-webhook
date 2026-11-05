@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Authenticated static-site and immutable game-package deployment webhook."""
+"""Authenticated immutable game-package deployment webhook."""
 import binascii
 import functools
 import hmac
@@ -13,7 +13,6 @@ import stat
 import struct
 import tempfile
 import threading
-import time
 import zipfile
 import zlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -25,6 +24,7 @@ MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 MAX_ARCHIVE_FILES = 10000
 MAX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 ID_PATTERN = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
+RESERVED_GAME_IDS = {'assets', 'wasm'}
 VERSION_PATTERN = re.compile(r'^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$')
 ARCHIVE_READ_ERRORS = (
     binascii.Error, EOFError, NotImplementedError, RuntimeError, struct.error,
@@ -110,8 +110,9 @@ def _validate_manifest(data):
     if isinstance(manifest.get('manifestVersion'), bool) or manifest.get('manifestVersion') != 1:
         raise InvalidArchiveError('unsupported manifest version')
     game_id = manifest.get('id')
-    if not isinstance(game_id, str) or not ID_PATTERN.fullmatch(game_id):
-        raise InvalidArchiveError('invalid game id')
+    if (not isinstance(game_id, str) or not ID_PATTERN.fullmatch(game_id) or
+            game_id in RESERVED_GAME_IDS):
+        raise InvalidArchiveError('invalid or reserved game id')
     name = manifest.get('name')
     if not isinstance(name, str) or not name.strip() or len(name) > 120:
         raise InvalidArchiveError('invalid game name')
@@ -214,7 +215,7 @@ def _write_registry(path, registry):
             os.unlink(temporary)
 
 
-def _validate_archive(archive, require_index=False, require_manifest=False):
+def _validate_archive(archive, require_manifest=False):
     try:
         entries = archive.infolist()
     except ARCHIVE_READ_ERRORS as exc:
@@ -256,8 +257,6 @@ def _validate_archive(archive, require_index=False, require_manifest=False):
             raise InvalidArchiveError('archive expands beyond limit')
         validated.append((item, parts, is_dir))
     files = { '/'.join(parts) for _item, parts, is_dir in validated if not is_dir }
-    if require_index and 'index.html' not in files:
-        raise InvalidArchiveError('root index.html is required')
     if require_manifest and 'manifest.json' not in files:
         raise InvalidArchiveError('root manifest.json is required')
     return validated, files
@@ -343,13 +342,12 @@ class Handler(BaseHTTPRequestHandler):
             raise
 
     def do_POST(self):
-        if self.path not in ('/_deploy', '/_deploy/game'):
+        if self.path != '/_deploy/game':
             return self.send_json(404, {'error': 'not_found'})
         if not self._authorized():
             return self.send_json(401, {'error': 'unauthorized'})
         upload = None
         stage = None
-        pending_link = None
         try:
             upload = self._receive_upload()
             if upload is None:
@@ -361,8 +359,7 @@ class Handler(BaseHTTPRequestHandler):
             with archive:
                 validated, files = _validate_archive(
                     archive,
-                    require_index=self.path == '/_deploy',
-                    require_manifest=self.path == '/_deploy/game',
+                    require_manifest=True,
                 )
                 if self.path == '/_deploy/game':
                     manifest_item = next(item for item, parts, is_dir in validated
@@ -381,20 +378,6 @@ class Handler(BaseHTTPRequestHandler):
                     os.makedirs(game_root, mode=0o2750, exist_ok=True)
                     stage = os.path.join(game_root, '.staging-' + secrets.token_hex(12))
                     count = _extract(validated, stage, archive)
-                else:
-                    release = time.strftime('%Y%m%d-%H%M%S') + '-' + secrets.token_hex(4)
-                    stage = os.path.join(ROOT, 'releases', '.staging-' + release)
-                    count = _extract(validated, stage, archive)
-
-            if self.path == '/_deploy':
-                final = os.path.join(ROOT, 'releases', release)
-                os.rename(stage, final)
-                stage = None
-                pending_link = os.path.join(ROOT, '.current-' + release)
-                os.symlink(final, pending_link)
-                os.replace(pending_link, os.path.join(ROOT, 'current'))
-                pending_link = None
-                return self.send_json(200, {'ok': True, 'release': release, 'files': count})
 
             game_id, version = manifest['id'], manifest['version']
             game_root = os.path.join(ROOT, 'games')
@@ -461,18 +444,13 @@ class Handler(BaseHTTPRequestHandler):
                     logging.exception('failed to remove upload')
             if stage and os.path.isdir(stage):
                 shutil.rmtree(stage, ignore_errors=True)
-            if pending_link and os.path.islink(pending_link):
-                try:
-                    os.unlink(pending_link)
-                except OSError:
-                    logging.exception('failed to remove pending symlink')
 
     def log_message(self, fmt, *args):
         print(self.client_address[0], fmt % args)
 
 
 def initialize_storage():
-    for directory in ('tmp', 'releases', 'games'):
+    for directory in ('tmp', 'games'):
         os.makedirs(os.path.join(ROOT, directory), mode=0o2750, exist_ok=True)
     registry_path = os.path.join(ROOT, 'games', 'registry.json')
     with REGISTRY_LOCK:
