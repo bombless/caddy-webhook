@@ -25,6 +25,7 @@ export class GamePlayerRuntime {
   private timer?: number
   private targetOrigin = '*'
   private storagePrefix = ''
+  private grantedCapabilities = new Set<string>()
   private messageListener: (event: MessageEvent) => void
   private disposed = false
 
@@ -46,6 +47,7 @@ export class GamePlayerRuntime {
       const { manifest, packageUrl } = await loadManifest(url)
       const allowed = new Set(this.options.allowedCapabilities ?? ['input.keyboard', 'input.pointer', 'score', 'storage'])
       const capabilities = manifest.runtime.capabilities.filter((cap) => allowed.has(cap))
+      this.grantedCapabilities = new Set(capabilities)
       this.storagePrefix = `bombless-game:${manifest.id}:`
       const entry = new URL(manifest.entry, packageUrl)
       if (entry.origin !== packageUrl.origin || !entry.pathname.startsWith(packageUrl.pathname)) throw new Error('Plugin entry escapes package')
@@ -85,18 +87,21 @@ export class GamePlayerRuntime {
         break
       case 'SCORE_UPDATE': {
         const score = message.payload.score
-        if (typeof score === 'number' && Number.isSafeInteger(score) && score >= 0 && score <= MAX_SCORE) this.options.onScore?.(score)
+        if (this.grantedCapabilities.has('score') && typeof score === 'number' && Number.isSafeInteger(score) && score >= 0 && score <= MAX_SCORE) this.options.onScore?.(score)
         break
       }
       case 'GAME_PAUSE': this.setState('paused'); break
       case 'GAME_RESUME': this.setState('running'); break
       case 'GAME_OVER': this.setState('ended'); break
       case 'AUDIO_PLAY':
-        if (message.requestId) this.reply(message.requestId, false, undefined, 'audio_unavailable')
+        if (message.requestId) this.reply(message.requestId, false, undefined, this.grantedCapabilities.has('audio') ? 'audio_unavailable' : 'capability_denied')
         break
       case 'STORAGE_GET':
       case 'STORAGE_SET':
-        if (message.requestId) void this.handleStorage(message)
+        if (message.requestId) {
+          if (!this.grantedCapabilities.has('storage')) this.reply(message.requestId, false, undefined, 'capability_denied')
+          else void this.handleStorage(message)
+        }
         break
     }
   }
