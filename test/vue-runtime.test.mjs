@@ -178,3 +178,81 @@ test('compileVueSFC correctly compiles SFCs with v-if without ReferenceError on 
   assert.ok(pebbleComp, 'pebble-match Game.vue should compile and evaluate')
 })
 
+test('createGameBridge storage.set safely clones Vue reactive Proxies for postMessage', async () => {
+  const { ref, reactive } = await import('vue')
+
+  const listeners = []
+  const postedMessages = []
+  const mockParent = {
+    postMessage: (msg) => {
+      // Test that structuredClone on msg works without throwing DataCloneError / Proxy object could not be cloned
+      structuredClone(msg)
+      postedMessages.push(msg)
+    },
+  }
+
+  globalThis.window = {
+    addEventListener: (type, fn) => {
+      if (type === 'message') listeners.push(fn)
+    },
+    removeEventListener: () => {},
+    setTimeout: (...args) => globalThis.setTimeout(...args),
+    clearTimeout: (...args) => globalThis.clearTimeout(...args),
+    location: { href: 'http://localhost:5173/runner.html' },
+    parent: mockParent,
+  }
+
+  const { createGameBridge } = await import('../src/sdk/bridge.ts')
+  const bridge = createGameBridge()
+
+  // Simulate HOST_INIT
+  const initEvent = {
+    source: mockParent,
+    origin: 'http://localhost:5173',
+    data: {
+      protocol: 'bombless-game',
+      protocolVersion: 1,
+      instanceId: 'test-inst-1234567890',
+      type: 'HOST_INIT',
+      payload: {
+        apiVersion: '1',
+        packageUrl: 'http://localhost:5173/game/',
+        capabilities: ['storage'],
+      },
+    },
+  }
+  for (const fn of listeners) fn(initEvent)
+
+  // Now perform storage.set with a reactive Proxy and a ref array
+  const reactiveState = reactive({
+    cells: ref(['sand', 'moss', 'river']),
+    score: 100,
+  })
+
+  // This should not throw 'Proxy object could not be cloned'
+  const setPromise = bridge.runtime.storage.set('gameState', reactiveState)
+
+  const setMsg = postedMessages.find((m) => m.type === 'STORAGE_SET')
+  assert.ok(setMsg, 'STORAGE_SET message should have been posted')
+  assert.deepEqual(setMsg.payload.value.cells, ['sand', 'moss', 'river'])
+  assert.equal(setMsg.payload.value.score, 100)
+
+  // Simulate host response
+  const respEvent = {
+    source: mockParent,
+    data: {
+      protocol: 'bombless-game',
+      protocolVersion: 1,
+      instanceId: 'test-inst-1234567890',
+      type: 'HOST_RESPONSE',
+      requestId: setMsg.requestId,
+      payload: { ok: true },
+    },
+  }
+  for (const fn of listeners) fn(respEvent)
+  await setPromise
+
+  bridge.dispose()
+})
+
+

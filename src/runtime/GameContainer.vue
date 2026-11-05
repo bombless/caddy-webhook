@@ -66,17 +66,26 @@ async function initGame(payload: Record<string, unknown>) {
   }
 }
 
+function cloneRaw(val: unknown): any {
+  if (val === undefined || val === null) return val
+  try {
+    return JSON.parse(JSON.stringify(val))
+  } catch {
+    return val
+  }
+}
+
 async function saveComponentState() {
   try {
     if (typeof gameRef.value?.getSaveData === 'function') {
       const data = await gameRef.value.getSaveData()
       if (data !== undefined) {
-        await bridge.runtime.storage.set('__game_save__', data)
+        await bridge.runtime.storage.set('__game_save__', cloneRaw(data))
       }
     } else if (typeof gameRef.value?.saveState === 'function') {
       const data = await gameRef.value.saveState()
       if (data !== undefined) {
-        await bridge.runtime.storage.set('__game_save__', data)
+        await bridge.runtime.storage.set('__game_save__', cloneRaw(data))
       }
     }
   } catch (err) {

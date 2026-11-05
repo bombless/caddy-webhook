@@ -12,9 +12,18 @@ export function createGameBridge() {
   const notify = (type: string, payload: Record<string, unknown>) => {
     for (const fn of listeners.get(type) ?? []) fn(payload)
   }
+  const safeClone = (val: unknown): any => {
+    if (val === undefined || val === null) return val
+    try {
+      return JSON.parse(JSON.stringify(val))
+    } catch {
+      return val
+    }
+  }
   const emit = (type: string, payload: Record<string, unknown> = {}, requestId?: string) => {
     if (!instanceId) return
-    window.parent.postMessage(envelope(instanceId, type, payload, requestId), hostOrigin || '*')
+    const safePayload = (safeClone(payload) ?? {}) as Record<string, unknown>
+    window.parent.postMessage(envelope(instanceId, type, safePayload, requestId), hostOrigin || '*')
   }
   const on = (type: string, fn: Listener) => {
     if (!listeners.has(type)) listeners.set(type, new Set())

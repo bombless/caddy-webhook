@@ -167,7 +167,7 @@ async function startGame() {
 
 function getSaveData() {
   return {
-    cells: cells.value,
+    cells: Array.from(cells.value),
     cleared: cleared.value,
     best: best.value,
     status: status.value,
