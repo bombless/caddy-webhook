@@ -1,2 +1,2 @@
-export { useGameRuntime, provideGameRuntime } from './vue'
-export type { GameRuntime } from './vue'
+export { useGameRuntime, provideGameRuntime } from './vue.ts'
+export type { GameRuntime, GameStorage } from './vue.ts'

@@ -18,7 +18,10 @@
       "if": { "properties": { "pluginType": { "const": "vue3" } } },
       "then": {
         "properties": {
-          "entry": { "const": "index.html" },
+          "entry": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*:)[A-Za-z0-9._/-]+\\.(?:vue|js|mjs)$"
+          },
           "runtime": {
             "type": "object",
             "additionalProperties": false,

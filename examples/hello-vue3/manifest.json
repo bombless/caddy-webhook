@@ -4,7 +4,7 @@
   "name": "Hello Vue 3",
   "version": "1.0.0",
   "pluginType": "vue3",
-  "entry": "index.html",
+  "entry": "Game.vue",
   "runtime": {
     "apiVersion": "1",
     "display": { "aspectRatio": "16:9", "orientation": "landscape", "resize": "contain" },

@@ -3,7 +3,7 @@ export const PROTOCOL_VERSION = 1 as const
 
 export type HostMessageType = 'HOST_INIT' | 'HOST_DISPOSE' | 'VIEWPORT_RESIZE' | 'INPUT_EVENT'
 export type GameMessageType =
-  | 'GAME_READY' | 'AUDIO_PLAY' | 'STORAGE_GET' | 'STORAGE_SET'
+  | 'GAME_READY' | 'AUDIO_PLAY' | 'STORAGE_GET' | 'STORAGE_SET' | 'STORAGE_DELETE' | 'STORAGE_CLEAR'
   | 'SCORE_UPDATE' | 'GAME_PAUSE' | 'GAME_RESUME' | 'GAME_OVER'
 
 export interface Envelope<T extends string = string> {

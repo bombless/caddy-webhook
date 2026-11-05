@@ -1,11 +1,12 @@
-import { envelope, isEnvelope, type Envelope } from './protocol'
-import { loadManifest } from './manifest'
+import { envelope, isEnvelope, type Envelope } from './protocol.ts'
+import { loadManifest, type PluginManifest } from './manifest.ts'
 
 export type PlayerState = 'loading' | 'ready' | 'running' | 'paused' | 'ended' | 'disposed' | 'error'
 export interface PlayerOptions {
   timeoutMs?: number
   allowedCapabilities?: string[]
   gameOrigin?: string
+  runnerUrl?: string
   onScore?: (score: number) => void
   onState?: (state: PlayerState) => void
   onError?: (error: Error) => void
@@ -23,6 +24,8 @@ export class GamePlayerRuntime {
   private targetOrigin = '*'
   private messageListener: (event: MessageEvent) => void
   private disposed = false
+  private manifest?: PluginManifest
+  private inMemoryStorage = new Map<string, string>()
 
   constructor(iframe: HTMLIFrameElement, options: PlayerOptions = {}) {
     this.iframe = iframe
@@ -40,10 +43,14 @@ export class GamePlayerRuntime {
   async load(url: string) {
     try {
       const { manifest, packageUrl } = await loadManifest(url)
-      const allowed = new Set(this.options.allowedCapabilities ?? ['input.keyboard', 'input.pointer', 'score'])
+      this.manifest = manifest
+      const allowed = new Set(this.options.allowedCapabilities ?? ['input.keyboard', 'input.pointer', 'score', 'storage'])
       const capabilities = manifest.runtime.capabilities.filter((cap) => allowed.has(cap))
       const entry = new URL(manifest.entry, packageUrl)
-      if (entry.origin !== packageUrl.origin || !entry.pathname.startsWith(packageUrl.pathname)) throw new Error('Plugin entry escapes package')
+      if (entry.origin !== packageUrl.origin || !entry.pathname.startsWith(packageUrl.pathname)) {
+        throw new Error('Plugin entry escapes package')
+      }
+      const runnerUrl = new URL(this.options.runnerUrl ?? 'runner.html', window.location.href)
       const gameOrigin = this.options.gameOrigin ? new URL(this.options.gameOrigin).origin : undefined
       if (gameOrigin && (gameOrigin !== entry.origin || gameOrigin === window.location.origin)) {
         throw new Error('gameOrigin must match the plugin origin and differ from the host origin')
@@ -55,11 +62,15 @@ export class GamePlayerRuntime {
       this.iframe.addEventListener('load', () => {
         if (this.disposed) return
         this.iframe.contentWindow?.postMessage(envelope(this.instanceId, 'HOST_INIT', {
-          apiVersion: '1', packageUrl: packageUrl.href, capabilities,
+          apiVersion: '1',
+          packageUrl: packageUrl.href,
+          entry: manifest.entry,
+          capabilities,
+          manifest,
           viewport: { width: this.iframe.clientWidth, height: this.iframe.clientHeight },
         }), this.targetOrigin)
       }, { once: true })
-      this.iframe.src = entry.href
+      this.iframe.src = runnerUrl.href
       this.timer = window.setTimeout(() => this.fail(new Error('Game loading timed out')), this.options.timeoutMs ?? 15_000)
     } catch (error) { this.fail(error instanceof Error ? error : new Error(String(error))) }
   }
@@ -86,10 +97,81 @@ export class GamePlayerRuntime {
       case 'AUDIO_PLAY':
         if (message.requestId) this.reply(message.requestId, false, undefined, 'audio_unavailable')
         break
-      case 'STORAGE_GET':
-      case 'STORAGE_SET':
-        if (message.requestId) this.reply(message.requestId, false, undefined, 'storage_unavailable')
+      case 'STORAGE_GET': {
+        const key = message.payload.key
+        if (typeof key !== 'string' || !/^[a-zA-Z0-9_.-]{1,128}$/.test(key)) {
+          if (message.requestId) this.reply(message.requestId, false, undefined, 'invalid_key')
+          break
+        }
+        const gameId = this.manifest?.id ?? 'game'
+        const storageKey = `bombless_game_storage:${gameId}:${key}`
+        let val: unknown = null
+        try {
+          const raw = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem(storageKey) : this.inMemoryStorage.get(storageKey)
+          val = raw !== null && raw !== undefined ? JSON.parse(raw) : null
+        } catch {
+          val = this.inMemoryStorage.get(storageKey) ?? null
+        }
+        if (message.requestId) this.reply(message.requestId, true, val)
         break
+      }
+      case 'STORAGE_SET': {
+        const { key, value } = message.payload
+        if (typeof key !== 'string' || !/^[a-zA-Z0-9_.-]{1,128}$/.test(key)) {
+          if (message.requestId) this.reply(message.requestId, false, undefined, 'invalid_key')
+          break
+        }
+        const gameId = this.manifest?.id ?? 'game'
+        const storageKey = `bombless_game_storage:${gameId}:${key}`
+        try {
+          const serialized = JSON.stringify(value)
+          if (serialized.length > 256 * 1024) {
+            if (message.requestId) this.reply(message.requestId, false, undefined, 'quota_exceeded')
+            break
+          }
+          if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.setItem(storageKey, serialized)
+          }
+          this.inMemoryStorage.set(storageKey, serialized)
+          if (message.requestId) this.reply(message.requestId, true)
+        } catch {
+          this.inMemoryStorage.set(storageKey, JSON.stringify(value))
+          if (message.requestId) this.reply(message.requestId, true)
+        }
+        break
+      }
+      case 'STORAGE_DELETE': {
+        const key = message.payload.key
+        const gameId = this.manifest?.id ?? 'game'
+        const storageKey = `bombless_game_storage:${gameId}:${key}`
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.removeItem(storageKey)
+          }
+        } catch {}
+        this.inMemoryStorage.delete(storageKey)
+        if (message.requestId) this.reply(message.requestId, true)
+        break
+      }
+      case 'STORAGE_CLEAR': {
+        const gameId = this.manifest?.id ?? 'game'
+        const prefix = `bombless_game_storage:${gameId}:`
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            const toRemove: string[] = []
+            for (let i = 0; i < window.localStorage.length; i++) {
+              const k = window.localStorage.key(i)
+              if (k?.startsWith(prefix)) toRemove.push(k)
+            }
+            for (const k of toRemove) window.localStorage.removeItem(k)
+          }
+        } catch {}
+        for (const k of Array.from(this.inMemoryStorage.keys())) {
+          if (k.startsWith(prefix)) this.inMemoryStorage.delete(k)
+        }
+        if (message.requestId) this.reply(message.requestId, true)
+        break
+      }
     }
   }
 

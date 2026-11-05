@@ -62,7 +62,7 @@ if [[ -e "$UI_MARKER" ]]; then
   [[ -f "$UI_MARKER" && ! -L "$UI_MARKER" ]] || die 'UI ownership marker is not a regular file'
   grep -Fxq 'static-deploy-game-library-ui-v1' "$UI_MARKER" || die 'unrecognized UI ownership marker'
 else
-  for name in index.html assets wasm; do
+  for name in index.html runner.html assets wasm; do
     [[ ! -e "$GAMES_ROOT/$name" ]] || die "unowned path collides with UI destination: $GAMES_ROOT/$name; inspect it before rollout"
   done
 fi
@@ -104,6 +104,8 @@ class Assets(HTMLParser):
             if value and not value.startswith(('http:', 'https:', '//', 'data:', '#')):
                 self.refs.append(value.split('?', 1)[0].split('#', 1)[0])
 p = Assets(); p.feed((root / 'index.html').read_text(encoding='utf-8'))
+if (root / 'runner.html').is_file():
+    p.feed((root / 'runner.html').read_text(encoding='utf-8'))
 missing = [ref for ref in p.refs if not (root / ref).is_file()]
 if missing:
     raise SystemExit('missing built UI assets: ' + ', '.join(missing))
@@ -119,7 +121,7 @@ backup="$BACKUP_DIR/$stamp.$commit"
 mkdir -m 0700 "$backup"
 cp -a -- "$DEST" "$backup/webhook.py"
 mkdir -m 0700 "$backup/ui"
-for name in index.html assets wasm; do
+for name in index.html runner.html assets wasm; do
   if [[ -e "$GAMES_ROOT/$name" ]]; then
     [[ ! -L "$GAMES_ROOT/$name" ]] || die "refusing symlink UI path: $GAMES_ROOT/$name"
     cp -a -- "$GAMES_ROOT/$name" "$backup/ui/$name"
@@ -142,7 +144,7 @@ rollback() {
     else
       log "CRITICAL: webhook restore failed; backup: $backup/webhook.py"
     fi
-    for name in index.html assets wasm; do
+    for name in index.html runner.html assets wasm; do
       rm -rf -- "$GAMES_ROOT/$name"
       if [[ -e "$backup/ui/$name.present" ]]; then
         cp -a -- "$backup/ui/$name" "$GAMES_ROOT/$name"
@@ -160,6 +162,9 @@ rollback() {
 trap rollback EXIT
 
 install -o root -g "$caddy_group" -m 0640 "$BUILD/index.html" "$stage/index.html"
+if [[ -f "$BUILD/runner.html" ]]; then
+  install -o root -g "$caddy_group" -m 0640 "$BUILD/runner.html" "$stage/runner.html"
+fi
 cp -a -- "$BUILD/assets" "$stage/assets"
 if [[ -d "$BUILD/wasm" ]]; then cp -a -- "$BUILD/wasm" "$stage/wasm"; fi
 chown -R "root:$caddy_group" "$stage"
@@ -182,7 +187,7 @@ for game in registry['games']:
     if not isinstance(gid, str) or gid in reserved or not (root / gid).is_dir():
         raise SystemExit(f'missing, colliding, or invalid registered game directory: {gid!r}')
 for path in sorted(p for p in root.rglob('*') if p.is_file() and
-                   p.relative_to(root).parts[0] not in {'index.html', 'assets', 'wasm'} and
+                   p.relative_to(root).parts[0] not in {'index.html', 'runner.html', 'assets', 'wasm'} and
                    not p.relative_to(root).parts[0].startswith(('.ui-stage.', '.staging-'))):
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     lines.append(f'{digest}  {path.relative_to(root).as_posix()}')
@@ -202,6 +207,11 @@ for name in assets wasm; do
   if [[ -e "$stage/$name" ]]; then mv -- "$stage/$name" "$GAMES_ROOT/$name"; fi
 done
 # Publish the new entry point last, after every referenced asset directory exists.
+if [[ -f "$stage/runner.html" ]]; then
+  mv -f -- "$stage/runner.html" "$GAMES_ROOT/runner.html"
+  chown "root:$caddy_group" "$GAMES_ROOT/runner.html"
+  chmod 0640 "$GAMES_ROOT/runner.html"
+fi
 mv -f -- "$stage/index.html" "$GAMES_ROOT/index.html"
 chown "root:$caddy_group" "$GAMES_ROOT/index.html"
 chmod 0640 "$GAMES_ROOT/index.html"
@@ -223,7 +233,7 @@ root, baseline = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
 expected = baseline.read_text(encoding='utf-8').splitlines()
 actual = []
 for path in sorted(p for p in root.rglob('*') if p.is_file() and
-                   p.relative_to(root).parts[0] not in {'index.html', 'assets', 'wasm'} and
+                   p.relative_to(root).parts[0] not in {'index.html', 'runner.html', 'assets', 'wasm'} and
                    not p.relative_to(root).parts[0].startswith(('.ui-stage.', '.staging-'))):
     actual.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(root).as_posix()}")
 if actual != expected: raise SystemExit('registry/package data changed during UI update')

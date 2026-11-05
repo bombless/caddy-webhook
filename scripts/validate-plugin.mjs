@@ -15,6 +15,10 @@ if (!Array.isArray(manifest.runtime?.capabilities)) fail('runtime.capabilities m
 const entry = manifest.entry
 if (typeof entry !== 'string' || !entry || isAbsolute(entry) || entry.includes('\\') ||
     /^[a-z][a-z0-9+.-]*:/i.test(entry) || entry.split('/').some(p => !p || p === '.' || p === '..')) fail('entry must be package-relative')
+if (manifest.pluginType === 'vue3') {
+  if (entry.endsWith('.html')) fail('Vue3 entry must be a component (.vue, .js, .mjs), not .html')
+  if (!entry.endsWith('.vue') && !entry.endsWith('.js') && !entry.endsWith('.mjs')) fail('Vue3 entry must be a .vue component or .js/.mjs module')
+}
 const entryPath = resolve(root, entry)
 const rel = relative(root, entryPath)
 if (rel.startsWith('..' + sep) || rel === '..') fail('entry escapes package')

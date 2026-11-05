@@ -1,5 +1,5 @@
-import { envelope, isEnvelope, PROTOCOL_VERSION } from '../runtime/protocol'
-import type { GameRuntime } from './vue'
+import { envelope, isEnvelope, PROTOCOL_VERSION } from '../runtime/protocol.ts'
+import type { GameRuntime } from './vue.ts'
 
 type Listener = (value: any) => void
 export function createGameBridge() {
@@ -36,7 +36,11 @@ export function createGameBridge() {
       if (m.payload.apiVersion !== String(PROTOCOL_VERSION)) return
       packageBase = new URL(String(m.payload.packageUrl), window.location.href)
       capabilities = new Set(Array.isArray(m.payload.capabilities) ? m.payload.capabilities.filter((x): x is string => typeof x === 'string') : [])
-      emit('GAME_READY', {})
+      const hasInitListeners = (listeners.get('HOST_INIT')?.size ?? 0) > 0
+      notify('HOST_INIT', m.payload)
+      if (!hasInitListeners) {
+        emit('GAME_READY', {})
+      }
       return
     }
     if (!instanceId || m.instanceId !== instanceId) return
@@ -84,8 +88,10 @@ export function createGameBridge() {
       await request('AUDIO_PLAY', { soundId, volume: Math.max(0, Math.min(1, options?.volume ?? 1)) })
     } },
     storage: {
-      get: async (key) => capabilities.has('storage') ? request('STORAGE_GET', { key }) : undefined,
-      set: async (key, value) => { if (capabilities.has('storage')) await request('STORAGE_SET', { key, value }) },
+      get: async (key: string) => capabilities.has('storage') ? request('STORAGE_GET', { key }) : undefined,
+      set: async (key: string, value: unknown) => { if (capabilities.has('storage')) await request('STORAGE_SET', { key, value }) },
+      delete: async (key: string) => { if (capabilities.has('storage')) await request('STORAGE_DELETE', { key }) },
+      clear: async () => { if (capabilities.has('storage')) await request('STORAGE_CLEAR', {}) },
     },
     game: {
       setScore: (score) => { if (capabilities.has('score') && Number.isSafeInteger(score) && score >= 0 && score <= 1_000_000_000) emit('SCORE_UPDATE', { score }) },
@@ -107,5 +113,6 @@ export function createGameBridge() {
     for (const p of pending.values()) { clearTimeout(p.timer); p.reject(new Error('Bridge disposed')) }
     pending.clear(); listeners.clear()
   }
-  return { runtime, dispose }
+  const emitReady = () => emit('GAME_READY', {})
+  return { runtime, dispose, on, notify, emit, emitReady }
 }

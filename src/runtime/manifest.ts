@@ -28,6 +28,12 @@ export function validateManifest(value: unknown): PluginManifest {
       m.entry.split('/').some((part: string) => !part || part === '.' || part === '..')) {
     throw new Error('entry must be a safe package-relative path')
   }
+  if (m.entry.endsWith('.html')) {
+    throw new Error('Vue3 package entry must be a component, not .html')
+  }
+  if (!m.entry.endsWith('.vue') && !m.entry.endsWith('.js') && !m.entry.endsWith('.mjs')) {
+    throw new Error('Vue3 package entry must be a Vue component (.vue) or JavaScript module (.js, .mjs)')
+  }
   const runtime = m.runtime
   if (!runtime || runtime.apiVersion !== '1' || !runtime.display || typeof runtime.display !== 'object' ||
       !Array.isArray(runtime.capabilities) ||

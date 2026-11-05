@@ -148,8 +148,8 @@ def _validate_manifest(data):
         if ratio is not None and (not isinstance(ratio, str) or
                 not re.fullmatch(r'\d+(?:\.\d+)?:\d+(?:\.\d+)?', ratio)):
             raise InvalidArchiveError('invalid display aspect ratio')
-        if entry != 'index.html':
-            raise InvalidArchiveError('Vue3 package entry must be index.html')
+        if entry.endswith('.html') or not (entry.endswith('.vue') or entry.endswith('.js') or entry.endswith('.mjs')):
+            raise InvalidArchiveError('Vue3 package entry must be a Vue component (.vue) or JavaScript module (.js, .mjs), not .html')
     else:
         if set(runtime) - {'apiVersion', 'display', 'capabilities', 'wasm'}:
             raise InvalidArchiveError('unknown WASM runtime field')

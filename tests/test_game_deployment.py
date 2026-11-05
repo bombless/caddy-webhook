@@ -56,7 +56,7 @@ class GameDeploymentTests(unittest.TestCase):
     def vue_manifest(self, game_id='moonlight-courier', version='1.0.0', name='Moonlight Courier'):
         return {
             'manifestVersion': 1, 'id': game_id, 'name': name, 'version': version,
-            'pluginType': 'vue3', 'entry': 'index.html',
+            'pluginType': 'vue3', 'entry': 'Game.vue',
             'runtime': {
                 'apiVersion': '1',
                 'display': {'aspectRatio': '16:9', 'orientation': 'landscape', 'resize': 'contain'},
@@ -87,7 +87,7 @@ class GameDeploymentTests(unittest.TestCase):
         })
 
     def publish_vue(self, game_id='moonlight-courier', version='1.0.0'):
-        payload = self.archive(self.vue_manifest(game_id, version), {'index.html': '<h1>game</h1>'})
+        payload = self.archive(self.vue_manifest(game_id, version), {'Game.vue': '<template><h1>game</h1></template>'})
         return self.post('/_deploy/game', payload)
 
 
@@ -101,7 +101,7 @@ class GameDeploymentTests(unittest.TestCase):
 
     def test_health_and_authentication(self):
         self.assertEqual(self.request('GET', '/health')[0], 200)
-        payload = self.archive(self.vue_manifest(), {'index.html': 'x'})
+        payload = self.archive(self.vue_manifest(), {'Game.vue': 'x'})
         self.assertEqual(self.post('/_deploy/game', payload, token='wrong')[0], 401)
 
     def test_vue_and_wasm_packages_publish_to_separate_versioned_paths(self):
@@ -128,7 +128,7 @@ class GameDeploymentTests(unittest.TestCase):
                          ['1.0.0', '1.1.0-beta.1', '1.2.0'])
         for version in ('1.0.0', '1.1.0-beta.1', '1.2.0'):
             self.assertTrue(os.path.isfile(os.path.join(
-                webhook.ROOT, 'games', 'moonlight-courier', version, 'index.html')))
+                webhook.ROOT, 'games', 'moonlight-courier', version, 'Game.vue')))
 
 
     def test_build_metadata_ties_use_lexical_version_order(self):
@@ -142,8 +142,8 @@ class GameDeploymentTests(unittest.TestCase):
         self.assertEqual(self.publish_vue()[0], 200)
         status, _ctype, body = self.publish_vue()
         self.assertEqual((status, body), (409, {'error': 'version_conflict'}))
-        with open(os.path.join(webhook.ROOT, 'games', 'moonlight-courier', '1.0.0', 'index.html')) as f:
-            self.assertEqual(f.read(), '<h1>game</h1>')
+        with open(os.path.join(webhook.ROOT, 'games', 'moonlight-courier', '1.0.0', 'Game.vue')) as f:
+            self.assertEqual(f.read(), '<template><h1>game</h1></template>')
 
     def test_game_zip_does_not_require_root_index_but_requires_manifest_entry(self):
         payload = self.archive(self.wasm_manifest(), {'game.wasm': b'wasm'})
@@ -151,20 +151,26 @@ class GameDeploymentTests(unittest.TestCase):
         invalid = self.archive(self.vue_manifest('missing-entry'), {'readme.txt': 'no entry'})
         self.assertEqual(self.post('/_deploy/game', invalid)[0], 400)
 
+    def test_vue_html_entry_is_rejected(self):
+        invalid = self.vue_manifest('html-game')
+        invalid['entry'] = 'index.html'
+        payload = self.archive(invalid, {'index.html': '<h1>game</h1>'})
+        self.assertEqual(self.post('/_deploy/game', payload)[0], 400)
+
     def test_ui_asset_directories_are_reserved_from_game_ids(self):
         for game_id in ('assets', 'wasm'):
-            payload = self.archive(self.vue_manifest(game_id), {'index.html': 'x'})
+            payload = self.archive(self.vue_manifest(game_id), {'Game.vue': 'x'})
             self.assertEqual(self.post('/_deploy/game', payload)[0], 400)
 
     def test_invalid_manifest_and_unsafe_paths_are_rejected(self):
         invalid_id = self.vue_manifest('../escape')
-        payload = self.archive(invalid_id, {'index.html': 'x'})
+        payload = self.archive(invalid_id, {'Game.vue': 'x'})
         self.assertEqual(self.post('/_deploy/game', payload)[0], 400)
         invalid_version = self.vue_manifest('bad-version', 'not-semver')
-        payload = self.archive(invalid_version, {'index.html': 'x'})
+        payload = self.archive(invalid_version, {'Game.vue': 'x'})
         self.assertEqual(self.post('/_deploy/game', payload)[0], 400)
         traversal = self.archive(self.vue_manifest('traversal'), {
-            'index.html': 'x', '../outside.txt': 'blocked'
+            'Game.vue': 'x', '../outside.txt': 'blocked'
         })
         self.assertEqual(self.post('/_deploy/game', traversal)[0], 400)
 
@@ -199,45 +205,45 @@ class GameDeploymentTests(unittest.TestCase):
 
 
     def test_missing_or_malformed_manifest_and_unsupported_contract_are_rejected(self):
-        missing = self.archive(None, {'index.html': 'not a package'})
+        missing = self.archive(None, {'Game.vue': 'not a package'})
         self.assertEqual(self.post('/_deploy/game', missing)[0], 400)
 
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, 'w') as z:
             z.writestr('manifest.json', '{broken json')
-            z.writestr('index.html', 'x')
+            z.writestr('Game.vue', 'x')
         self.assertEqual(self.post('/_deploy/game', buffer.getvalue())[0], 400)
 
         unsupported = self.vue_manifest('future-game')
         unsupported['manifestVersion'] = 2
-        self.assertEqual(self.post('/_deploy/game', self.archive(unsupported, {'index.html': 'x'}))[0], 400)
+        self.assertEqual(self.post('/_deploy/game', self.archive(unsupported, {'Game.vue': 'x'}))[0], 400)
 
         unsupported = self.vue_manifest('future-runtime')
         unsupported['pluginType'] = 'native'
-        self.assertEqual(self.post('/_deploy/game', self.archive(unsupported, {'index.html': 'x'}))[0], 400)
+        self.assertEqual(self.post('/_deploy/game', self.archive(unsupported, {'Game.vue': 'x'}))[0], 400)
 
     def test_absolute_and_symlink_zip_entries_are_rejected(self):
         absolute = self.archive(self.vue_manifest('absolute-path'), {
-            'index.html': 'x', '/outside.txt': 'blocked'
+            'Game.vue': 'x', '/outside.txt': 'blocked'
         })
         self.assertEqual(self.post('/_deploy/game', absolute)[0], 400)
 
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, 'w') as z:
             z.writestr('manifest.json', json.dumps(self.vue_manifest('symlink-game')))
-            z.writestr('index.html', 'x')
+            z.writestr('Game.vue', 'x')
             info = zipfile.ZipInfo('link')
             info.create_system = 3
             info.external_attr = (stat.S_IFLNK | 0o777) << 16
-            z.writestr(info, 'index.html')
+            z.writestr(info, 'Game.vue')
         self.assertEqual(self.post('/_deploy/game', buffer.getvalue())[0], 400)
 
     def test_archive_entry_expansion_and_upload_limits_are_enforced(self):
-        payload = self.archive(self.vue_manifest('many-files'), {'index.html': 'x', 'extra.txt': 'y'})
+        payload = self.archive(self.vue_manifest('many-files'), {'Game.vue': 'x', 'extra.txt': 'y'})
         with mock.patch.object(webhook, 'MAX_ARCHIVE_FILES', 2):
             self.assertEqual(self.post('/_deploy/game', payload)[0], 400)
 
-        payload = self.archive(self.vue_manifest('expanded'), {'index.html': 'larger'})
+        payload = self.archive(self.vue_manifest('expanded'), {'Game.vue': 'larger'})
         with mock.patch.object(webhook, 'MAX_UNCOMPRESSED_BYTES', 2):
             self.assertEqual(self.post('/_deploy/game', payload)[0], 400)
 
@@ -249,12 +255,12 @@ class GameDeploymentTests(unittest.TestCase):
         self.assertEqual((status, body), (413, {'error': 'invalid_size'}))
 
     def test_registry_never_references_package_when_registry_commit_fails(self):
-        payload = self.archive(self.vue_manifest('orphan-game'), {'index.html': 'x'})
+        payload = self.archive(self.vue_manifest('orphan-game'), {'Game.vue': 'x'})
         with mock.patch.object(webhook, '_write_registry', side_effect=OSError('simulated disk failure')):
             status, _ctype, body = self.post('/_deploy/game', payload)
         self.assertEqual((status, body), (500, {'error': 'internal_error'}))
         self.assertTrue(os.path.isfile(os.path.join(
-            webhook.ROOT, 'games', 'orphan-game', '1.0.0', 'index.html')))
+            webhook.ROOT, 'games', 'orphan-game', '1.0.0', 'Game.vue')))
         _status, _ctype, registry = self.request('GET', '/_games/registry.json')
         self.assertEqual(registry['games'], [])
 

@@ -4,12 +4,14 @@ This repository contains a first runnable host + Vue 3 plugin prototype.
 
 ## Layout
 
-- `src/runtime/manifest.ts`: validates manifest v1 and resolves package-relative entry URLs.
+- `src/runtime/manifest.ts`: validates manifest v1 and resolves package-relative entry URLs (rejecting `.html` for Vue 3).
 - `src/runtime/protocol.ts`: shared protocol envelope and version checks.
-- `src/runtime/player.ts`: iframe player, instance binding, lifecycle, timeout and score handling.
-- `src/sdk/vue.ts`: `useGameRuntime()` API contract and injection key.
+- `src/runtime/player.ts`: iframe host player, loads runtime container (`runner.html`), manages lifecycle and namespaced storage persistence.
+- `src/runtime/GameContainer.vue`: runtime-owned Vue 3 container component inside the iframe that hosts the game component.
+- `src/runtime/sfc-loader.ts`: in-browser SFC compiler and module loader for game components.
+- `src/sdk/vue.ts`: `useGameRuntime()` API contract, `GameStorage`, and injection key.
 - `src/sdk/bridge.ts`: iframe-side bridge and request/response handling.
-- `examples/hello-vue3/`: minimal Vue 3 game package.
+- `examples/hello-vue3/`: minimal Vue 3 game package submitting `Game.vue` directly without HTML.
 - `schemas/game-plugin-manifest.schema.json`: interoperable manifest schema.
 - `scripts/validate-plugin.mjs`: package entry validation.
 
@@ -28,13 +30,16 @@ The build emits the platform shell to `dist/` and the example package to
 `dist/games/hello-vue3/`. The ZIP deployed to the existing webhook must include
 the entire `dist/` directory at its root.
 
-## Runtime API
+## Runtime API and Component Contract
 
-A game imports `useGameRuntime()` from the SDK and receives:
+The game directly submits a Vue 3 component (e.g. `Game.vue` or `.js` module) rather than `.html`. Inside the iframe, the platform's `GameContainer` component mounts the game and coordinates lifecycle and persistence:
 
+- **Lifecycle notification:** The game component exposes `startGame()` (or `start()`) via `defineExpose` so the runtime container notifies it when the game starts.
+- **Persistence solution:**
+  - Direct API: `storage.get(key)` / `storage.set(key, value)` / `storage.delete(key)` / `storage.clear()` via `useGameRuntime().storage` (persisted in namespaced host storage).
+  - Lifecycle hooks: The component can expose `getSaveData()` and `loadSaveData(data)` (or `saveState` / `restoreState`) which the container automatically invokes on state restoration, pause, and disposal.
 - `assets.url(relativePath)`
 - `audio.play(soundId, options?)`
-- `storage.get(key)` / `storage.set(key, value)`
 - `game.setScore(score)`, `game.pause()`, `game.resume()`, `game.end(result?)`
 - `input.subscribe(listener)` for normalized keyboard/pointer events
 - `viewport.subscribe(listener)` for resize notifications
