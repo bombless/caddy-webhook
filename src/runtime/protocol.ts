@@ -1,9 +1,9 @@
 export const PROTOCOL = 'bombless-game' as const
 export const PROTOCOL_VERSION = 1 as const
 
-export type HostMessageType = 'HOST_INIT' | 'HOST_DISPOSE' | 'VIEWPORT_RESIZE' | 'INPUT_EVENT'
+export type HostMessageType = 'HOST_INIT' | 'HOST_START' | 'HOST_PAUSE' | 'HOST_RESUME' | 'HOST_END' | 'HOST_DISPOSE' | 'VIEWPORT_RESIZE' | 'INPUT_EVENT'
 export type GameMessageType =
-  | 'GAME_READY' | 'AUDIO_PLAY' | 'STORAGE_GET' | 'STORAGE_SET'
+  | 'GAME_READY' | 'GAME_ERROR' | 'AUDIO_PLAY' | 'STORAGE_GET' | 'STORAGE_SET'
   | 'SCORE_UPDATE' | 'GAME_PAUSE' | 'GAME_RESUME' | 'GAME_OVER'
 
 export interface Envelope<T extends string = string> {
