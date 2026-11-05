@@ -38,6 +38,10 @@ let resize: (() => void) | undefined
 
 const selectedGame = () => registry.value?.games.find(game => game.id === selectedId.value)
 const packageUrl = (manifestUrl: string) => new URL('.', new URL(manifestUrl, window.location.href)).href
+function helpInputLabel(input: string) {
+  if (/^Key[A-Z]$/.test(input)) return input.slice(3)
+  return ({ ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' } as Record<string, string>)[input] ?? input
+}
 
 function disposePlayer() {
   vueRuntime?.dispose()
@@ -256,7 +260,7 @@ onBeforeUnmount(() => {
           <li v-for="control in wasmHelp.controls" :key="control.action">
             <span>{{ control.label }}</span>
             <span class="key-list">
-              <kbd v-for="input in control.inputs" :key="input">{{ input }}</kbd>
+              <kbd v-for="input in control.inputs" :key="input">{{ helpInputLabel(input) }}</kbd>
             </span>
           </li>
         </ul>
