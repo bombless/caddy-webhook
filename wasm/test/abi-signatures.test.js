@@ -132,3 +132,46 @@ test("ABI preflight accepts the complete valid ABI v1 fixture", async () => {
   const messages = await initialize(validModule.buffer);
   assert.equal(messages[0].type, "READY");
 });
+
+test("ABI preflight rejects required exports with i64 or f32 signatures", async () => {
+  // Mutate type 1 (used by game_init: (i32, i32) -> i32) to (i64, i32) -> i32
+  const bytes = new Uint8Array(validModule);
+  let type1Offset = -1;
+  for (let i = 0; i < bytes.length - 6; i++) {
+    if (bytes[i] === 0x60 && bytes[i + 1] === 2 && bytes[i + 2] === 0x7f && bytes[i + 3] === 0x7f && bytes[i + 4] === 1 && bytes[i + 5] === 0x7f) {
+      type1Offset = i;
+      break;
+    }
+  }
+  assert.ok(type1Offset > 0);
+
+  const i64Module = new Uint8Array(bytes);
+  i64Module[type1Offset + 2] = 0x7e; // i64
+  const i64Messages = await initialize(i64Module.buffer);
+  assert.equal(i64Messages.at(-1).type, "ERROR");
+  assert.match(i64Messages.at(-1).message, /invalid ABI signature: game_init/);
+
+  const f32Module = new Uint8Array(bytes);
+  f32Module[type1Offset + 2] = 0x7d; // f32
+  const f32Messages = await initialize(f32Module.buffer);
+  assert.equal(f32Messages.at(-1).type, "ERROR");
+  assert.match(f32Messages.at(-1).message, /invalid ABI signature: game_init/);
+});
+
+test("ABI preflight rejects unsupported WASM value types", async () => {
+  const bytes = new Uint8Array(validModule);
+  let type1Offset = -1;
+  for (let i = 0; i < bytes.length - 6; i++) {
+    if (bytes[i] === 0x60 && bytes[i + 1] === 2 && bytes[i + 2] === 0x7f && bytes[i + 3] === 0x7f && bytes[i + 4] === 1 && bytes[i + 5] === 0x7f) {
+      type1Offset = i;
+      break;
+    }
+  }
+  assert.ok(type1Offset > 0);
+
+  const f64Module = new Uint8Array(bytes);
+  f64Module[type1Offset + 2] = 0x7c; // f64 (unsupported)
+  const f64Messages = await initialize(f64Module.buffer);
+  assert.equal(f64Messages.at(-1).type, "ERROR");
+  assert.match(f64Messages.at(-1).message, /unsupported WASM value type \(supported: i32, i64, f32\)/);
+});
