@@ -1,5 +1,12 @@
 import { inject, provide, type InjectionKey } from 'vue'
 
+export interface GameComponentLifecycle {
+  onGameStart(): void | Promise<void>
+  onGamePause(): void | Promise<void>
+  onGameResume(): void | Promise<void>
+  onGameEnd(result?: unknown): void | Promise<void>
+}
+
 export interface GameRuntime {
   assets: { url(path: string): string }
   audio: { play(soundId: string, options?: { volume?: number }): Promise<void> }
