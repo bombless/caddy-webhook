@@ -9,6 +9,7 @@ export function createGameBridge() {
   let capabilities = new Set<string>()
   let mounted = false
   let readySent = false
+  let pendingError = ''
   const listeners = new Map<string, Set<Listener>>()
   const pending = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: number }>()
   const notify = (type: string, payload: Record<string, unknown>) => {
@@ -19,7 +20,9 @@ export function createGameBridge() {
     window.parent.postMessage(envelope(instanceId, type, payload, requestId), hostOrigin || '*')
   }
   const maybeReady = () => {
-    if (mounted && instanceId && !readySent) { readySent = true; emit('GAME_READY', {}) }
+    if (!instanceId) return
+    if (pendingError) { emit('GAME_ERROR', { message: pendingError }); pendingError = ''; return }
+    if (mounted && !readySent) { readySent = true; emit('GAME_READY', {}) }
   }
   const on = (type: string, fn: Listener) => {
     if (!listeners.has(type)) listeners.set(type, new Set())
@@ -114,5 +117,14 @@ export function createGameBridge() {
     for (const p of pending.values()) { clearTimeout(p.timer); p.reject(new Error('Bridge disposed')) }
     pending.clear(); listeners.clear()
   }
-  return { runtime, on, ready: () => { mounted = true; maybeReady() }, fail: (message: string) => emit('GAME_ERROR', { message }), dispose }
+  return {
+    runtime, on,
+    ready: () => { mounted = true; maybeReady() },
+    fail: (message: string) => {
+      const safeMessage = message.slice(0, 500)
+      if (instanceId) emit('GAME_ERROR', { message: safeMessage })
+      else pendingError = safeMessage
+    },
+    dispose,
+  }
 }
