@@ -11,9 +11,14 @@ redir /games /games/ 308
 # full /games prefix in the filesystem path avoids collisions between index/assets
 # and package-owned <game-id>/<version>/ directories.
 @game_packages path_regexp game_packages ^/games/[a-z0-9][a-z0-9-]{0,63}/(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?/.*$
-header @game_packages Access-Control-Allow-Origin "*"
 header @game_packages Cache-Control "public, max-age=31536000, immutable"
 header @game_packages X-Content-Type-Options "nosniff"
+
+@games_all path /games/*
+header @games_all Access-Control-Allow-Origin "*"
+
+@game_assets path /games/assets/*
+header @game_assets Cache-Control "public, max-age=31536000, immutable"
 
 handle /games/* {
 	root * /var/lib/static-deploy
