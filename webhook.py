@@ -105,20 +105,20 @@ def _validate_help(help_data):
         raise InvalidArchiveError('unknown game help field')
 
     locale = help_data.get('locale')
-    if locale is not None and (not isinstance(locale, str) or len(locale) > 35 or
+    if 'locale' in help_data and (not isinstance(locale, str) or len(locale) > 35 or
             not re.fullmatch(r'[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*', locale)):
         raise InvalidArchiveError('invalid game help locale')
     for key in ('description', 'objective'):
         value = help_data.get(key)
-        if value is not None and (not isinstance(value, str) or len(value) > 500):
+        if key in help_data and (not isinstance(value, str) or len(value) > 500):
             raise InvalidArchiveError('invalid game help ' + key)
     for key in ('instructions', 'tips'):
         values = help_data.get(key)
-        if values is not None and (not isinstance(values, list) or len(values) > 20 or
+        if key in help_data and (not isinstance(values, list) or len(values) > 20 or
                 any(not isinstance(value, str) or not value.strip() or len(value) > 240 for value in values)):
             raise InvalidArchiveError('invalid game help ' + key)
     controls = help_data.get('controls')
-    if controls is not None:
+    if 'controls' in help_data:
         if not isinstance(controls, list) or len(controls) > 32:
             raise InvalidArchiveError('invalid game help controls')
         actions = set()
