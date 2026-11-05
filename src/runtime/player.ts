@@ -13,6 +13,9 @@ export interface PlayerOptions {
 
 const MAX_MESSAGE_BYTES = 16_384
 const MAX_SCORE = 1_000_000_000
+const STORAGE_KEY = /^[a-zA-Z0-9_.:-]{1,64}$/
+const STORAGE_VALUE_BYTES = 8 * 1024
+const STORAGE_NAMESPACE_BYTES = 64 * 1024
 
 export class GamePlayerRuntime {
   readonly iframe: HTMLIFrameElement
@@ -21,6 +24,7 @@ export class GamePlayerRuntime {
   private options: PlayerOptions
   private timer?: number
   private targetOrigin = '*'
+  private storagePrefix = ''
   private messageListener: (event: MessageEvent) => void
   private disposed = false
 
@@ -40,8 +44,9 @@ export class GamePlayerRuntime {
   async load(url: string) {
     try {
       const { manifest, packageUrl } = await loadManifest(url)
-      const allowed = new Set(this.options.allowedCapabilities ?? ['input.keyboard', 'input.pointer', 'score'])
+      const allowed = new Set(this.options.allowedCapabilities ?? ['input.keyboard', 'input.pointer', 'score', 'storage'])
       const capabilities = manifest.runtime.capabilities.filter((cap) => allowed.has(cap))
+      this.storagePrefix = `bombless-game:${manifest.id}:`
       const entry = new URL(manifest.entry, packageUrl)
       if (entry.origin !== packageUrl.origin || !entry.pathname.startsWith(packageUrl.pathname)) throw new Error('Plugin entry escapes package')
       const gameOrigin = this.options.gameOrigin ? new URL(this.options.gameOrigin).origin : undefined
@@ -73,7 +78,10 @@ export class GamePlayerRuntime {
     switch (message.type) {
       case 'GAME_READY':
         if (this.timer) clearTimeout(this.timer)
-        this.setState('running')
+        this.setState('ready')
+        break
+      case 'GAME_ERROR':
+        this.fail(new Error(typeof message.payload.message === 'string' ? message.payload.message.slice(0, 500) : 'Game component contract failed'))
         break
       case 'SCORE_UPDATE': {
         const score = message.payload.score
@@ -88,8 +96,45 @@ export class GamePlayerRuntime {
         break
       case 'STORAGE_GET':
       case 'STORAGE_SET':
-        if (message.requestId) this.reply(message.requestId, false, undefined, 'storage_unavailable')
+        if (message.requestId) void this.handleStorage(message)
         break
+    }
+  }
+
+  private async handleStorage(message: Envelope) {
+    const id = message.requestId!
+    const key = message.payload.key
+    if (typeof key !== 'string' || !STORAGE_KEY.test(key)) {
+      this.reply(id, false, undefined, 'invalid_storage_key')
+      return
+    }
+    const fullKey = this.storagePrefix + key
+    try {
+      if (message.type === 'STORAGE_GET') {
+        const raw = localStorage.getItem(fullKey)
+        this.reply(id, true, raw === null ? undefined : JSON.parse(raw))
+        return
+      }
+      const serialized = JSON.stringify(message.payload.value)
+      if (serialized === undefined) throw new Error('value_not_serializable')
+      const bytes = new TextEncoder().encode(serialized).byteLength
+      if (bytes > STORAGE_VALUE_BYTES) throw new Error('value_too_large')
+      let used = 0
+      for (let i = 0; i < localStorage.length; i++) {
+        const existingKey = localStorage.key(i)
+        if (existingKey?.startsWith(this.storagePrefix)) {
+          const existingValue = localStorage.getItem(existingKey) ?? ''
+          used += new TextEncoder().encode(existingKey + existingValue).byteLength
+        }
+      }
+      const old = localStorage.getItem(fullKey)
+      const oldBytes = old === null ? 0 : new TextEncoder().encode(fullKey + old).byteLength
+      const newBytes = new TextEncoder().encode(fullKey + serialized).byteLength
+      if (used - oldBytes + newBytes > STORAGE_NAMESPACE_BYTES) throw new Error('storage_quota_exceeded')
+      localStorage.setItem(fullKey, serialized)
+      this.reply(id, true, true)
+    } catch (error) {
+      this.reply(id, false, undefined, error instanceof Error ? error.message : 'storage_unavailable')
     }
   }
 
@@ -99,8 +144,26 @@ export class GamePlayerRuntime {
   resize() {
     if (this.state !== 'disposed' && this.state !== 'error') this.send('VIEWPORT_RESIZE', { width: this.iframe.clientWidth, height: this.iframe.clientHeight })
   }
-  pause() { this.send('HOST_PAUSE', {}); this.setState('paused') }
-  resume() { this.send('HOST_RESUME', {}); this.setState('running') }
+  start() {
+    if (this.state !== 'ready' && this.state !== 'paused') return
+    this.send('HOST_START', {})
+    this.setState('running')
+  }
+  pause() {
+    if (this.state !== 'running') return
+    this.send('HOST_PAUSE', {})
+    this.setState('paused')
+  }
+  resume() {
+    if (this.state !== 'paused') return
+    this.send('HOST_RESUME', {})
+    this.setState('running')
+  }
+  end(result?: unknown) {
+    if (this.state !== 'running' && this.state !== 'paused') return
+    this.send('HOST_END', { result })
+    this.setState('ended')
+  }
   private send(type: string, payload: Record<string, unknown>) {
     this.iframe.contentWindow?.postMessage(envelope(this.instanceId, type, payload), this.targetOrigin)
   }
