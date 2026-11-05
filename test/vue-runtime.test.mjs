@@ -166,3 +166,15 @@ test('GamePlayerRuntime storage persistence handles GET, SET, DELETE, and CLEAR'
 
   runtime.dispose()
 })
+
+test('compileVueSFC correctly compiles SFCs with v-if without ReferenceError on hoisted key', async () => {
+  const fs = await import('node:fs')
+  const helloCode = fs.readFileSync('examples/hello-vue3/Game.vue', 'utf-8')
+  const { component: helloComp } = compileVueSFC(helloCode, 'Game.vue')
+  assert.ok(helloComp, 'hello-vue3 Game.vue should compile and evaluate')
+
+  const pebbleCode = fs.readFileSync('examples/pebble-match/Game.vue', 'utf-8')
+  const { component: pebbleComp } = compileVueSFC(pebbleCode, 'Game.vue')
+  assert.ok(pebbleComp, 'pebble-match Game.vue should compile and evaluate')
+})
+

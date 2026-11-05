@@ -131,9 +131,6 @@ function evaluateScriptContent(rawContent: string): any {
     return `const { ${dest} } = SDK;`
   })
 
-  // Strip simple TypeScript type annotations if present
-  js = js.replace(/:\s*(?:[A-Za-z0-9_<>\[\]|&\s]+)(?=[=,);{])/g, '')
-
   // Transform export default
   js = js.replace(/export\s+default\s+/, 'return ')
 
