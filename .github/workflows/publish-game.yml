@@ -51,7 +51,11 @@ jobs:
         run: |
           set -euo pipefail
           test -f demo/game.c || { echo "::error::demo/game.c not found on selected ref"; exit 1; }
-          test -f "$PACKAGE_DIR/manifest.json" || { echo "::error::Snake package manifest not found"; exit 1; }
+          test -f demo/games/snake/manifest.json || { echo "::error::Canonical Snake manifest missing from demo/games/snake/manifest.json"; exit 1; }
+          mkdir -p "$PACKAGE_DIR"
+          if [ "$PACKAGE_DIR/manifest.json" != "demo/games/snake/manifest.json" ]; then
+            cp demo/games/snake/manifest.json "$PACKAGE_DIR/manifest.json"
+          fi
           clang --target=wasm32 -O2 -fno-builtin -nostdlib \
             -Wl,--no-entry -Wl,--export-memory \
             -Wl,--initial-memory=262144 -Wl,--max-memory=1048576 \
