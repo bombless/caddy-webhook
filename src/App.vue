@@ -27,6 +27,9 @@ const canvas = ref<HTMLCanvasElement>()
 const state = ref<PlayerState | 'loading' | 'ready' | 'running' | 'paused' | 'error'>('loading')
 const score = ref(0)
 const wasmGrantedCapabilities = ref<string[]>([])
+const wasmHelp = ref<Record<string, any> | null>(null)
+const helpOpen = ref(false)
+let helpWasRunning = false
 const error = ref('')
 const loadingRegistry = ref(true)
 let vueRuntime: GamePlayerRuntime | undefined
@@ -35,6 +38,10 @@ let resize: (() => void) | undefined
 
 const selectedGame = () => registry.value?.games.find(game => game.id === selectedId.value)
 const packageUrl = (manifestUrl: string) => new URL('.', new URL(manifestUrl, window.location.href)).href
+function helpInputLabel(input: string) {
+  if (/^Key[A-Z]$/.test(input)) return input.slice(3)
+  return ({ ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' } as Record<string, string>)[input] ?? input
+}
 
 function disposePlayer() {
   vueRuntime?.dispose()
@@ -51,6 +58,9 @@ async function launchSelected() {
   state.value = 'loading'
   error.value = ''
   score.value = 0
+  wasmHelp.value = null
+  helpOpen.value = false
+  helpWasRunning = false
   try {
     if (game.pluginType === 'vue3') {
       if (!frame.value) throw new Error('Vue3 player frame is unavailable')
@@ -67,7 +77,8 @@ async function launchSelected() {
         grantedCapabilities: wasmGrantedCapabilities.value,
         onError: (value: Error) => { error.value = value.message; state.value = 'error' },
       })
-      await wasmRuntime.load(new URL('.', new URL(game.manifestUrl, window.location.href)))
+      const loadedManifest = await wasmRuntime.load(new URL('.', new URL(game.manifestUrl, window.location.href)))
+      wasmHelp.value = loadedManifest.help ?? null
       if (wasmGrantedCapabilities.value.includes('input.keyboard')) {
         canvas.value?.focus({ preventScroll: true })
       }
@@ -138,7 +149,27 @@ async function loadRegistry() {
   }
 }
 
+function openHelp() {
+  if (!wasmHelp.value) return
+  helpWasRunning = state.value === 'running'
+  if (helpWasRunning) {
+    wasmRuntime?.pause()
+    state.value = 'paused'
+  }
+  helpOpen.value = true
+}
+function closeHelp() {
+  helpOpen.value = false
+  if (helpWasRunning) {
+    wasmRuntime?.resume()
+    state.value = 'running'
+    canvas.value?.focus({ preventScroll: true })
+  }
+  helpWasRunning = false
+}
+
 function pause() {
+  if (helpOpen.value) helpWasRunning = false
   vueRuntime?.pause()
   wasmRuntime?.pause()
   state.value = 'paused'
@@ -201,18 +232,48 @@ onBeforeUnmount(() => {
       <div v-if="selectedGame()?.pluginType === 'wasm'" class="permission-row">
         <span v-if="wasmGrantedCapabilities.length">
           Keyboard and pointer input allowed for this session. Click the game area to focus it.
-          <template v-if="selectedGame()?.id === 'snake-arcade'">Press P or Pause to toggle Snake pause.</template>
         </span>
         <span v-else>Keyboard and pointer input are blocked by default.</span>
         <button v-if="!wasmGrantedCapabilities.length" type="button" @click="grantWasmControls">
           Allow game controls
         </button>
+        <button v-if="wasmHelp" type="button" @click="openHelp">How to play</button>
       </div>
       <div v-if="state === 'error'" class="error" role="alert">
         <strong>Unable to load game</strong><p>{{ error }}</p>
       </div>
       <div v-else-if="state === 'loading' || loadingRegistry" class="loading">Loading game…</div>
       <div v-else-if="!selectedGame() && !loadingRegistry" class="loading">Publish a game package to populate the library.</div>
+    </section>
+    <section v-if="helpOpen && wasmHelp" class="game-help" aria-labelledby="game-help-title">
+      <header class="help-header">
+        <div>
+          <h2 id="game-help-title">How to play</h2>
+          <p v-if="wasmHelp.locale" class="help-locale">{{ wasmHelp.locale }}</p>
+        </div>
+        <button type="button" @click="closeHelp">Close help</button>
+      </header>
+      <p v-if="wasmHelp.description">{{ wasmHelp.description }}</p>
+      <p v-if="wasmHelp.objective"><strong>Objective:</strong> {{ wasmHelp.objective }}</p>
+      <div v-if="wasmHelp.controls?.length" class="help-section">
+        <h3>Controls</h3>
+        <ul class="help-controls">
+          <li v-for="control in wasmHelp.controls" :key="control.action">
+            <span>{{ control.label }}</span>
+            <span class="key-list">
+              <kbd v-for="input in control.inputs" :key="input">{{ helpInputLabel(input) }}</kbd>
+            </span>
+          </li>
+        </ul>
+      </div>
+      <div v-if="wasmHelp.instructions?.length" class="help-section">
+        <h3>Instructions</h3>
+        <ol><li v-for="(instruction, index) in wasmHelp.instructions" :key="index">{{ instruction }}</li></ol>
+      </div>
+      <div v-if="wasmHelp.tips?.length" class="help-section">
+        <h3>Tips</h3>
+        <ul><li v-for="(tip, index) in wasmHelp.tips" :key="index">{{ tip }}</li></ul>
+      </div>
     </section>
     <footer>
       <span>Games run in their runtime-specific sandbox.</span>

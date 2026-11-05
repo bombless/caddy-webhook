@@ -1,6 +1,32 @@
 const DEFAULTS = { grantedCapabilities: [], maxModuleBytes: 16*1024*1024, maxMemoryPages: 256, maxOutputBytes: 4*1024*1024, watchdogMs: 1000, maxQueue: 128, renderHz: 30 };
 const IMPLEMENTED_CAPABILITIES = new Set(["input.keyboard", "input.pointer"]);
 const KEY_CODES = new Set(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","Space","Enter","Escape","KeyP","Pause"]);
+function validateHelp(help) {
+  if (!help || typeof help !== "object" || Array.isArray(help) || help.schemaVersion !== 1) throw Error("invalid game help declaration");
+  const allowed = new Set(["schemaVersion", "locale", "description", "objective", "instructions", "controls", "tips"]);
+  if (Object.keys(help).some(key => !allowed.has(key))) throw Error("unknown game help field");
+  const text = (value, max, required = false) => typeof value === "string" && value.length <= max && (!required || value.trim().length > 0);
+  if (help.locale !== undefined && (!text(help.locale, 35, true) || !/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(help.locale))) throw Error("invalid game help locale");
+  for (const key of ["description", "objective"]) if (help[key] !== undefined && !text(help[key], 500)) throw Error("invalid game help " + key);
+  for (const key of ["instructions", "tips"]) {
+    if (help[key] !== undefined && (!Array.isArray(help[key]) || help[key].length > 20 || help[key].some(item => !text(item, 240, true)))) throw Error("invalid game help " + key);
+  }
+  if (help.controls !== undefined) {
+    if (!Array.isArray(help.controls) || help.controls.length > 32) throw Error("invalid game help controls");
+    const actions = new Set();
+    for (const control of help.controls) {
+      if (!control || typeof control !== "object" || Array.isArray(control) ||
+          Object.keys(control).some(key => !["action", "label", "inputs"].includes(key)) ||
+          !/^[a-z][a-z0-9_.-]{0,47}$/.test(control.action || "") ||
+          actions.has(control.action) || !text(control.label, 80, true) ||
+          !Array.isArray(control.inputs) || control.inputs.length < 1 || control.inputs.length > 8 ||
+          control.inputs.some(input => !text(input, 32, true)) ||
+          new Set(control.inputs).size !== control.inputs.length) throw Error("invalid game help control");
+      actions.add(control.action);
+    }
+  }
+}
+
 const safePath = p => {
   if (typeof p !== "string" || !p.length || p.length > 240 || p.startsWith("/") || p.includes("\\") || /[%\u0000-\u001f\u007f]/.test(p) || !/^[A-Za-z0-9._/-]+$/.test(p) || /^[a-z][a-z0-9+.-]*:/i.test(p)) return false;
   let decoded; try { decoded = decodeURIComponent(p); } catch { return false; }
@@ -132,8 +158,9 @@ export class WasmGamePlayer {
   _validateManifest(m) {
     if(!m||typeof m!=="object"||Array.isArray(m)||m.manifestVersion!==1||m.pluginType!=="wasm"||!m.runtime||m.runtime.apiVersion!=="1") throw Error("invalid plugin manifest");
     if(typeof m.name!=="string"||!m.name.trim()||m.name.length>120||typeof m.version!=="string"||!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(m.version)) throw Error("invalid plugin metadata");
-    const allowedTop=new Set(["manifestVersion","id","name","version","pluginType","entry","runtime"]);
+    const allowedTop=new Set(["manifestVersion","id","name","version","pluginType","entry","runtime","help"]);
     if(Object.keys(m).some(k=>!allowedTop.has(k))) throw Error("unknown manifest field");
+    if(m.help!==undefined) validateHelp(m.help);
     if(!/^[a-z0-9][a-z0-9-]{0,63}$/.test(m.id||"")||!safePath(m.entry)||!m.entry.endsWith(".wasm")) throw Error("invalid plugin id or entry");
     const d=m.runtime.display,w=m.runtime.wasm;
     if(!d||!Number.isInteger(d.width)||!Number.isInteger(d.height)||d.width<1||d.height<1||d.width>1024||d.height>1024) throw Error("invalid display dimensions");

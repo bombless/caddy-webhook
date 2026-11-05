@@ -98,6 +98,43 @@ def _safe_relative_path(value):
     return all(part not in ('', '.', '..') for part in parts)
 
 
+def _validate_help(help_data):
+    if not isinstance(help_data, dict) or isinstance(help_data.get('schemaVersion'), bool) or help_data.get('schemaVersion') != 1:
+        raise InvalidArchiveError('invalid game help declaration')
+    if set(help_data) - {'schemaVersion', 'locale', 'description', 'objective', 'instructions', 'controls', 'tips'}:
+        raise InvalidArchiveError('unknown game help field')
+
+    locale = help_data.get('locale')
+    if 'locale' in help_data and (not isinstance(locale, str) or len(locale) > 35 or
+            not re.fullmatch(r'[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*', locale)):
+        raise InvalidArchiveError('invalid game help locale')
+    for key in ('description', 'objective'):
+        value = help_data.get(key)
+        if key in help_data and (not isinstance(value, str) or len(value) > 500):
+            raise InvalidArchiveError('invalid game help ' + key)
+    for key in ('instructions', 'tips'):
+        values = help_data.get(key)
+        if key in help_data and (not isinstance(values, list) or len(values) > 20 or
+                any(not isinstance(value, str) or not value.strip() or len(value) > 240 for value in values)):
+            raise InvalidArchiveError('invalid game help ' + key)
+    controls = help_data.get('controls')
+    if 'controls' in help_data:
+        if not isinstance(controls, list) or len(controls) > 32:
+            raise InvalidArchiveError('invalid game help controls')
+        actions = set()
+        for control in controls:
+            if not isinstance(control, dict) or set(control) - {'action', 'label', 'inputs'}:
+                raise InvalidArchiveError('invalid game help control')
+            action, label, inputs = control.get('action'), control.get('label'), control.get('inputs')
+            if (not isinstance(action, str) or not re.fullmatch(r'[a-z][a-z0-9_.-]{0,47}', action) or
+                    action in actions or not isinstance(label, str) or not label.strip() or len(label) > 80 or
+                    not isinstance(inputs, list) or not 1 <= len(inputs) <= 8 or
+                    any(not isinstance(item, str) or not item.strip() or len(item) > 32 for item in inputs) or
+                    len(set(inputs)) != len(inputs)):
+                raise InvalidArchiveError('invalid game help control')
+            actions.add(action)
+
+
 def _validate_manifest(data):
     try:
         manifest = json.loads(data.decode('utf-8'), object_pairs_hook=_strict_object)
@@ -105,7 +142,7 @@ def _validate_manifest(data):
         raise InvalidArchiveError('manifest is not strict UTF-8 JSON') from exc
     if not isinstance(manifest, dict):
         raise InvalidArchiveError('manifest must be an object')
-    if set(manifest) - {'manifestVersion', 'id', 'name', 'version', 'pluginType', 'entry', 'runtime'}:
+    if set(manifest) - {'manifestVersion', 'id', 'name', 'version', 'pluginType', 'entry', 'runtime', 'help'}:
         raise InvalidArchiveError('unknown manifest field')
     if isinstance(manifest.get('manifestVersion'), bool) or manifest.get('manifestVersion') != 1:
         raise InvalidArchiveError('unsupported manifest version')
@@ -120,6 +157,10 @@ def _validate_manifest(data):
     plugin_type = manifest.get('pluginType')
     if plugin_type not in ('vue3', 'wasm'):
         raise InvalidArchiveError('unsupported plugin type')
+    if 'help' in manifest:
+        if manifest.get('pluginType') != 'wasm':
+            raise InvalidArchiveError('game help metadata is only supported for WASM packages')
+        _validate_help(manifest['help'])
     entry = manifest.get('entry')
     if not _safe_relative_path(entry):
         raise InvalidArchiveError('unsafe package entry')

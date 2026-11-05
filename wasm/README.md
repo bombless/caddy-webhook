@@ -44,6 +44,48 @@ Only `input.keyboard` and `input.pointer` are currently grantable. Audio,
 persistence, score, and asset capabilities remain disabled even when declared
 in a manifest. Unknown or not-yet-implemented host grants are rejected.
 
+## Game help manifest v1
+
+WASM packages may include an optional top-level `help` object in
+`manifest.json`. The host reads this metadata and renders a consistent,
+accessible help panel outside the game Canvas; the guest does not need to draw
+menus or explanatory text into its framebuffer.
+
+The object is versioned independently from the package and ABI:
+
+```json
+{
+  "help": {
+    "schemaVersion": 1,
+    "locale": "en",
+    "description": "Guide the character through the level.",
+    "objective": "Reach the exit without losing all your lives.",
+    "controls": [
+      { "action": "move_left", "label": "Move left", "inputs": ["ArrowLeft", "KeyA"] },
+      { "action": "jump", "label": "Jump", "inputs": ["Space"] }
+    ],
+    "instructions": ["Avoid hazards.", "Collect keys to unlock the exit."],
+    "tips": ["Look for safe paths before moving."]
+  }
+}
+```
+
+Fields are optional except `schemaVersion` when `help` is present.
+`description` and `objective` are plain text; `instructions` and `tips`
+are bounded lists of plain-text items. Each control has a unique semantic
+`action`, a human-readable `label`, and one or more input identifiers.
+Use browser `KeyboardEvent.code` values (for example `ArrowLeft`, `KeyA`,
+`Space`, `Enter`, `KeyP`) so the host can show consistent keycaps.
+Input identifiers describe controls; they do not grant input capabilities.
+The host still applies the normal explicit capability grant policy.
+
+The dependency-free runtime validator and both checked-in JSON schemas enforce
+the same bounded shape and reject unknown properties. Old manifests without
+`help` remain valid. The first implementation is static: the host reads help
+once during manifest loading. Dynamic, level-specific hints and guest/host
+request-response negotiation are deliberately deferred to a separately
+versioned protocol; ABI v1 has no guest-to-host help message channel.
+
 ## ABI v1 implementation contract
 
 See `abi/game.h`. In addition to the six lifecycle exports, the module must

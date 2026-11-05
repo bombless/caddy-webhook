@@ -575,3 +575,48 @@ test("clicking a keyboard-only game canvas focuses it without granting pointer i
   instance._pointerEvent({ type: "pointerdown" });
   assert.equal(focused, true);
 });
+
+
+test("accepts optional bounded help metadata and keeps old manifests compatible", () => {
+  const manifest = validManifest();
+  assert.doesNotThrow(() => player._validateManifest(manifest));
+  manifest.help = {
+    schemaVersion: 1,
+    locale: "en",
+    description: "Collect food and avoid collisions.",
+    objective: "Get the highest score.",
+    instructions: ["Eat food to grow.", "Avoid walls and your body."],
+    controls: [
+      { action: "move_up", label: "Move up", inputs: ["ArrowUp", "KeyW"] },
+      { action: "pause", label: "Pause", inputs: ["KeyP"] }
+    ],
+    tips: ["Plan ahead."]
+  };
+  assert.doesNotThrow(() => player._validateManifest(manifest));
+
+  const invalid = [
+    value => { value.help.schemaVersion = 2; },
+    value => { value.help.unknown = true; },
+    value => { value.help.locale = "../en"; },
+    value => { value.help.instructions = [""]; },
+    value => { value.help.controls[0].inputs = []; },
+    value => { value.help.controls.push({ action: "move_up", label: "Duplicate", inputs: ["W"] }); },
+    value => { value.help.controls[0].extra = true; }
+  ];
+  for (const mutate of invalid) {
+    const candidate = validManifest();
+    candidate.help = structuredClone(manifest.help);
+    mutate(candidate);
+    assert.throws(() => player._validateManifest(candidate));
+  }
+});
+
+test("loads help metadata without granting any additional runtime capabilities", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  const manifest = validManifest();
+  manifest.help = { schemaVersion: 1, controls: [{ action: "jump", label: "Jump", inputs: ["Space"] }] };
+  instance.options = { grantedCapabilities: ["input.keyboard"] };
+  const granted = instance._grantCapabilities(manifest);
+  assert.deepEqual(granted.help, manifest.help);
+  assert.deepEqual(granted.runtime.capabilities, ["input.keyboard"]);
+});

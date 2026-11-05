@@ -7,8 +7,15 @@
   "entry": "game.wasm",
   "runtime": {
     "apiVersion": "1",
-    "display": { "width": 160, "height": 120, "pixelScale": "fit", "orientation": "landscape" },
-    "capabilities": ["input.keyboard"],
+    "display": {
+      "width": 160,
+      "height": 120,
+      "pixelScale": "fit",
+      "orientation": "landscape"
+    },
+    "capabilities": [
+      "input.keyboard"
+    ],
     "wasm": {
       "abi": "bombless-game-abi",
       "abiVersion": 1,
@@ -16,5 +23,69 @@
       "maxOutputBytes": 307200,
       "renderMode": "rgba"
     }
+  },
+  "help": {
+    "schemaVersion": 1,
+    "locale": "en",
+    "description": "Guide the snake around the board and collect food without hitting the walls or its own body.",
+    "objective": "Collect as much food as possible and earn the highest score you can.",
+    "controls": [
+      {
+        "action": "move_up",
+        "label": "Move up",
+        "inputs": [
+          "ArrowUp",
+          "KeyW"
+        ]
+      },
+      {
+        "action": "move_down",
+        "label": "Move down",
+        "inputs": [
+          "ArrowDown",
+          "KeyS"
+        ]
+      },
+      {
+        "action": "move_left",
+        "label": "Move left",
+        "inputs": [
+          "ArrowLeft",
+          "KeyA"
+        ]
+      },
+      {
+        "action": "move_right",
+        "label": "Move right",
+        "inputs": [
+          "ArrowRight",
+          "KeyD"
+        ]
+      },
+      {
+        "action": "pause",
+        "label": "Pause / resume",
+        "inputs": [
+          "KeyP",
+          "Pause"
+        ]
+      },
+      {
+        "action": "restart",
+        "label": "Restart after game over",
+        "inputs": [
+          "Enter"
+        ]
+      }
+    ],
+    "instructions": [
+      "Steer the snake toward the food to increase your score.",
+      "Each food item makes the snake longer.",
+      "The game ends if the snake hits a wall or runs into its own body."
+    ],
+    "tips": [
+      "Plan turns before the snake reaches the edge of the board.",
+      "Leave room to turn around as the snake gets longer."
+    ]
   }
 }
