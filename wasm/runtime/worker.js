@@ -46,8 +46,8 @@ function validateAbiSignatures(bytes) {
         for (let p = 0; p < paramCount; p++) params.push(view.getUint8(offset++));
         const resultCount = readU32(end), results = [];
         for (let r = 0; r < resultCount; r++) results.push(view.getUint8(offset++));
-        if (offset > end || params.some(x => x !== 0x7f) || results.some(x => x !== 0x7f)) throw Error("unsupported WASM ABI value type");
-        types.push({ params: params.length, results: results.length });
+        if (offset > end || params.some(x => ![0x7f, 0x7e, 0x7d].includes(x)) || results.some(x => ![0x7f, 0x7e, 0x7d].includes(x))) throw Error("unsupported WASM value type (supported: i32, i64, f32)");
+        types.push({ params, results });
       }
     } else if (id === 2) {
       const count = readU32(end);
@@ -78,7 +78,8 @@ function validateAbiSignatures(bytes) {
     if (!item || item.kind !== 0) throw Error("missing export: " + name);
     const typeIndex = functions[item.index];
     const type = types[typeIndex];
-    if (!type || type.params !== signature[0] || type.results !== signature[1]) {
+    if (!type || type.params.length !== signature[0] || type.results.length !== signature[1] ||
+        type.params.some(x => x !== 0x7f) || type.results.some(x => x !== 0x7f)) {
       throw Error("invalid ABI signature: " + name);
     }
   }
