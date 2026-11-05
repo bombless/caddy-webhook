@@ -38,8 +38,11 @@ jobs:
           node --input-type=module <<'NODE'
           import { readFileSync, statSync } from 'node:fs';
           const manifest = JSON.parse(readFileSync('package/manifest.json', 'utf8'));
+          const versionParts = typeof manifest.version === 'string' ? manifest.version.split('.') : [];
+          const validVersion = versionParts.length === 3 && versionParts.every(part =>
+            part.length > 0 && [...part].every(char => char >= '0' && char <= '9'));
           if (manifest.id !== 'snake-arcade' || manifest.pluginType !== 'wasm' ||
-              manifest.entry !== 'game.wasm' || !/^\\d+\\.\\d+\\.\\d+$/.test(manifest.version)) {
+              manifest.entry !== 'game.wasm' || !validVersion) {
             throw new Error('Unexpected Snake package manifest');
           }
           console.log(`Built ${manifest.id}@${manifest.version}: ${statSync('package/game.wasm').size} bytes`);
