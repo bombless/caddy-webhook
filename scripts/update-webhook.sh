@@ -16,6 +16,8 @@ HEALTH_URL="${WEBHOOK_HEALTH_URL:-http://127.0.0.1:8765/health}"
 LIBRARY_URL='https://bombless.duckdns.org/games/'
 REGISTRY_URL='https://bombless.duckdns.org/_games/registry.json'
 CADDY_GROUP_OVERRIDE="${CADDY_GROUP:-}"
+export no_proxy="127.0.0.1,localhost,bombless.duckdns.org${no_proxy:+,}${no_proxy:-}"
+export NO_PROXY="127.0.0.1,localhost,bombless.duckdns.org${NO_PROXY:+,}${NO_PROXY:-}"
 
 log() { printf '[update-webhook] %s\n' "$*"; }
 die() { log "ERROR: $*" >&2; exit 1; }
@@ -150,7 +152,16 @@ rollback() {
         cp -a -- "$backup/ui/$name" "$GAMES_ROOT/$name"
       fi
     done
-    if systemctl restart "$SERVICE" && curl --fail --silent --show-error --max-time 5 "$HEALTH_URL" >/dev/null; then
+    systemctl restart "$SERVICE" || true
+    healthy_rollback=0
+    for attempt in $(seq 1 10); do
+      if systemctl is-active --quiet "$SERVICE" && curl --fail --silent --show-error --max-time 2 "$HEALTH_URL" >/dev/null 2>&1; then
+        healthy_rollback=1
+        break
+      fi
+      sleep 1
+    done
+    if [[ "$healthy_rollback" -eq 1 ]]; then
       log 'previous webhook restored and healthy; previous UI files restored'
     else
       log "CRITICAL: rollback restart/health failed; inspect service; backup: $backup"
