@@ -1,6 +1,6 @@
 const DEFAULTS = { grantedCapabilities: [], maxModuleBytes: 16*1024*1024, maxMemoryPages: 256, maxOutputBytes: 4*1024*1024, watchdogMs: 1000, maxQueue: 128, renderHz: 30 };
 const IMPLEMENTED_CAPABILITIES = new Set(["input.keyboard", "input.pointer"]);
-const KEY_CODES = new Set(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","Space","Enter","Escape"]);
+const KEY_CODES = new Set(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","Space","Enter","Escape","KeyP","Pause"]);
 const safePath = p => {
   if (typeof p !== "string" || !p.length || p.length > 240 || p.startsWith("/") || p.includes("\\") || /[%\u0000-\u001f\u007f]/.test(p) || !/^[A-Za-z0-9._/-]+$/.test(p) || /^[a-z][a-z0-9+.-]*:/i.test(p)) return false;
   let decoded; try { decoded = decodeURIComponent(p); } catch { return false; }
@@ -203,12 +203,18 @@ export class WasmGamePlayer {
     // this guard every mounted game would consume page-level shortcuts.
     const active=document.activeElement;
     if(active!==this.canvas && !this.canvas.contains?.(active)) return;
-    if(e.type==="keydown"){if(this.held.has(e.code))return;this.held.add(e.code);} else this.held.delete(e.code);
+    if(e.code==="Pause") {
+      // The dedicated Pause key is a one-shot key on some browsers and may not
+      // emit keyup. Do not leave it stuck in the held-key set.
+      if(e.type!=="keydown" || e.repeat)return;
+    } else if(e.type==="keydown"){if(this.held.has(e.code))return;this.held.add(e.code);} else this.held.delete(e.code);
     e.preventDefault(); this._send({type:e.type==="keydown"?"KEY_DOWN":"KEY_UP",code:e.code,modifiers:(e.shiftKey?1:0)|(e.ctrlKey?2:0)|(e.altKey?4:0)|(e.metaKey?8:0),timestamp_micros:this._timestampMicros()});
   }
   _pointerEvent(e) {
-    if(!this.running||!this.manifest.runtime.capabilities.includes("input.pointer")) return;
+    // Focusing the game surface is a keyboard UX action, not pointer input.
+    // Keep it available even when the game did not request input.pointer.
     if(e.type==="pointerdown") this.canvas.focus?.({preventScroll:true});
+    if(!this.running||!this.manifest.runtime.capabilities.includes("input.pointer")) return;
     const now=performance.now(); if(e.type==="pointermove" && now-this.lastPointerMove<16)return; if(e.type==="pointermove")this.lastPointerMove=now;
     const {x,y}=this._logicalPoint(e.clientX,e.clientY);
     const type={pointerdown:"POINTER_DOWN",pointerup:"POINTER_UP",pointermove:"POINTER_MOVE",pointercancel:"POINTER_CANCEL"}[e.type];

@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "snake-arcade",
   "name": "Snake Arcade",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "pluginType": "wasm",
   "entry": "game.wasm",
   "runtime": {

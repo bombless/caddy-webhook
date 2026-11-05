@@ -13,7 +13,7 @@ static u8 framebuffer[FRAME_BYTES];
 static u8 config_buf[1024];
 static u8 input_buf[1024];
 static int sx[MAX_SNAKE], sy[MAX_SNAKE];
-static int length, dx, dy, food_x, food_y, ticks, score, over;
+static int length, dx, dy, food_x, food_y, ticks, score, over, paused;
 static u32 random_state = 0xB04B1E55u;
 
 /* Tiny freestanding memmove used by LLVM's loop-idiom optimization. */
@@ -51,7 +51,7 @@ static void place_food(void) {
 }
 static void reset_game(void) {
   length=4; sx[0]=10; sy[0]=7; sx[1]=9; sy[1]=7; sx[2]=8; sy[2]=7; sx[3]=7; sy[3]=7;
-  dx=1; dy=0; ticks=0; score=0; over=0; random_state=0xB04B1E55u; place_food();
+  dx=1; dy=0; ticks=0; score=0; over=0; paused=0; random_state=0xB04B1E55u; place_food();
 }
 static void pixel(int x, int y, u8 r, u8 g, u8 b) {
   if (x<0 || y<0 || x>=W || y>=H) return;
@@ -72,7 +72,7 @@ static void digit(int x, int y, int n) {
 __attribute__((export_name("game_abi_version"))) u32 game_abi_version(void){return 1;}
 __attribute__((export_name("game_init"))) int game_init(u32 ptr,u32 len){(void)ptr;(void)len;reset_game();return 0;}
 __attribute__((export_name("game_update"))) int game_update(u32 dt){
-  if(over)return 0;
+  if(over||paused)return 0;
   ticks+=(int)dt;
   while(ticks>=120000 && !over){
     ticks-=120000;
@@ -93,6 +93,8 @@ __attribute__((export_name("game_input"))) int game_input(u32 ptr,u32 len){
   if(over||ptr!=(u32)(unsigned long)input_buf||len>sizeof(input_buf)) return 0;
   const u8 *event=(const u8 *)(unsigned long)ptr;
   if(!contains(event,len,"KEY_DOWN")) return 0;
+  if(contains(event,len,"KeyP")||contains(event,len,"Pause")){paused=!paused;return 0;}
+  if(paused)return 0;
   int ndx=dx,ndy=dy;
   if(contains(event,len,"ArrowUp")||contains(event,len,"KeyW")){ndx=0;ndy=-1;}
   else if(contains(event,len,"ArrowDown")||contains(event,len,"KeyS")){ndx=0;ndy=1;}
@@ -112,6 +114,11 @@ __attribute__((export_name("game_render"))) int game_render(u32 ptr,u32 cap){
     rect(sx[i]*CELL+1,sy[i]*CELL+1,CELL-2,CELL-2,r,g,b);
   }
   digit(5,5,score/100);digit(13,5,(score/10)%10);digit(21,5,score%10);
+  if(paused){
+    rect(68,48,24,24,31,48,62);
+    rect(74,54,4,12,238,174,111);
+    rect(82,54,4,12,238,174,111);
+  }
   if(over){
     rect(36,52,88,16,31,48,62);
     rect(42,58,4,4,255,111,97);

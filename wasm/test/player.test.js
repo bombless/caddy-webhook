@@ -536,3 +536,42 @@ test("tick postMessage failure clears watchdog state and reports a recoverable e
   assert.equal(terminated, 1);
   assert.match(reported.message, /message delivery failed/);
 });
+
+test("the dedicated Pause key and P key are accepted as keyboard controls", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  const sent = [];
+  const canvas = {};
+  Object.assign(instance, {
+    canvas, running: true,
+    manifest: { runtime: { capabilities: ["input.keyboard"] } },
+    held: new Set(), startedAt: performance.now(), _send: event => sent.push(event)
+  });
+  const originalDocument = globalThis.document;
+  globalThis.document = { activeElement: canvas };
+  const event = (code, type = "keydown", repeat = false) => ({
+    type, code, repeat, shiftKey: false, ctrlKey: false, altKey: false, metaKey: false,
+    preventDefault() {}
+  });
+  try {
+    instance._keyEvent(event("KeyP"));
+    instance._keyEvent(event("Pause"));
+    instance._keyEvent(event("Pause", "keydown", true));
+    assert.deepEqual(sent.map(item => item.code), ["KeyP", "Pause"]);
+    assert.equal(instance.held.has("Pause"), false, "Pause must not become a stuck held key");
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test("clicking a keyboard-only game canvas focuses it without granting pointer input", () => {
+  const instance = Object.create(WasmGamePlayer.prototype);
+  let focused = false;
+  Object.assign(instance, {
+    canvas: { focus: () => { focused = true; } },
+    running: true,
+    manifest: { runtime: { capabilities: ["input.keyboard"] } }
+  });
+  instance._pointerEvent({ type: "pointerdown" });
+  assert.equal(focused, true);
+});

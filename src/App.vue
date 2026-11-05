@@ -68,6 +68,9 @@ async function launchSelected() {
         onError: (value: Error) => { error.value = value.message; state.value = 'error' },
       })
       await wasmRuntime.load(new URL('.', new URL(game.manifestUrl, window.location.href)))
+      if (wasmGrantedCapabilities.value.includes('input.keyboard')) {
+        canvas.value?.focus({ preventScroll: true })
+      }
       state.value = 'running'
     } else {
       throw new Error('Unsupported game runtime')
@@ -196,7 +199,10 @@ onBeforeUnmount(() => {
         tabindex="0"
       />
       <div v-if="selectedGame()?.pluginType === 'wasm'" class="permission-row">
-        <span v-if="wasmGrantedCapabilities.length">Keyboard and pointer input allowed for this session.</span>
+        <span v-if="wasmGrantedCapabilities.length">
+          Keyboard and pointer input allowed for this session. Click the game area to focus it.
+          <template v-if="selectedGame()?.id === 'snake-arcade'">Press P or Pause to toggle Snake pause.</template>
+        </span>
         <span v-else>Keyboard and pointer input are blocked by default.</span>
         <button v-if="!wasmGrantedCapabilities.length" type="button" @click="grantWasmControls">
           Allow game controls
